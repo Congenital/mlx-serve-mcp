@@ -52,7 +52,10 @@ falls back to a configurable default (env var → built-in):
 >
 > - `ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit` is fast, but its quality is below
 >   `Runpod/FLUX.2-klein-4B-mflux-4bit` — in particular, face generation tends
->   to come out distorted.
+>   to come out distorted. However, it is far more reliable than
+>   `mlx-community/flux2-klein-9b-4bit` at rendering text in images, so for
+>   text-centric art (posters, typography, signs) rather than portraits,
+>   `ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit` is the recommended choice.
 > - `ddalcu/Mage-Flow-Edit-Turbo-MLX-Serve-8bit` can hit a weight/parameter
 >   error on mlx-serve (`Model load failed: MissingMageFlowWeight`), which makes
 >   the model unusable.
