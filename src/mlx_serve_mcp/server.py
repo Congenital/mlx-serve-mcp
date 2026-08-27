@@ -24,6 +24,7 @@ from typing import Any, Callable, Coroutine, get_type_hints
 
 from .client import MlxServeClient, MlxServeError
 from .config import Config, DEFAULT_TIMEOUT_SECONDS
+from . import prompts as prompts_module
 from .video import mux_video_mp4, write_wav
 
 # ── MCP protocol types ─────────────────────────────────────────────────
@@ -152,6 +153,7 @@ class McpServer:
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {
                 "tools": {},
+                "prompts": {},
             },
             "serverInfo": {
                 "name": self.name,
@@ -191,6 +193,18 @@ class McpServer:
                 "isError": True,
             }
 
+    async def _handle_prompts_list(self, params: dict[str, Any] | None) -> dict[str, Any]:
+        """Handle prompts/list request (ready-made generation recipes)."""
+        return {"prompts": prompts_module.list_prompts()}
+
+    async def _handle_prompts_get(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle prompts/get request."""
+        name = params.get("name")
+        arguments = params.get("arguments") or {}
+        if not isinstance(name, str):
+            raise ValueError("prompts/get requires a 'name' string")
+        return prompts_module.get_prompt(name, arguments)
+
     async def _handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
         """Dispatch a JSON-RPC request to the appropriate handler."""
         method = request.get("method")
@@ -203,6 +217,10 @@ class McpServer:
             result = await self._handle_tools_list(params)
         elif method == "tools/call":
             result = await self._handle_tools_call(params or {})
+        elif method == "prompts/list":
+            result = await self._handle_prompts_list(params)
+        elif method == "prompts/get":
+            result = await self._handle_prompts_get(params or {})
         elif method == "notifications/initialized":
             # Notification: no response needed
             return None
@@ -284,7 +302,9 @@ mcp = McpServer(
     instructions=(
         "Tools for a remote mlx-serve inference server: list/load/unload models and "
         "generate images, speech, music, video and textured 3D meshes. Media files "
-        "are saved to a local output directory; paths are returned as absolute paths."
+        "are saved to a local output directory; paths are returned as absolute paths. "
+        "Call health_check first to verify connectivity, then list_models to see which "
+        "models are available on this server."
     ),
 )
 

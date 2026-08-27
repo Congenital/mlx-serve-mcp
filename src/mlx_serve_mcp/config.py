@@ -12,7 +12,16 @@ DEFAULT_BASE_URL = "http://127.0.0.1:11234"
 DEFAULT_TIMEOUT_SECONDS = 1800.0  # video / music generation can run for many minutes
 
 # Default model ids (overridable via MLX_SERVE_*_MODEL env vars).
-DEFAULT_IMAGE_MODEL = "Runpod/FLUX.2-klein-4B-mflux-4bit"
+#
+# Model guidance (from real-world testing on mlx-serve):
+#   * Text-centric image work (posters, typography, in-image text) is far more
+#     reliable on ``ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit`` than on the
+#     higher-quality general models, so it is the default for ``generate_image``.
+#   * ``Runpod/FLUX.2-klein-4B-mflux-4bit`` is the best general-purpose pick and
+#     the only one in this group that renders faces well — it is the default for
+#     ``edit_image``, and the recommended ``model`` for portraits and
+#     photo-real scenes in ``generate_image``.
+DEFAULT_IMAGE_MODEL = "ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit"
 DEFAULT_IMAGE_EDIT_MODEL = "Runpod/FLUX.2-klein-4B-mflux-4bit"
 DEFAULT_TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
 DEFAULT_MUSIC_MODEL = "ddalcu/MiniMax-Music3-MLX-Serve-8bit"

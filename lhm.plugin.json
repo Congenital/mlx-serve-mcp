@@ -1,0 +1,457 @@
+{
+  "identifier": "congenital-mlx-serve-mcp",
+  "version": "1.0.0",
+  "name": "mlx-serve MCP",
+  "description": "Bring Apple Silicon AI to your MCP clients — a single stdio bridge to a remote mlx-serve inference server for images, speech, music, video and 3D, with ready-made one-click prompts.",
+  "author": {
+    "name": "Congenital",
+    "url": "https://github.com/Congenital"
+  },
+  "homepage": "https://github.com/Congenital/mlx-serve-mcp",
+  "license": "MIT",
+  "metadata": {
+    "lobeChat": {
+      "changelog": {
+        "en-US": {
+          "1.0.0": [
+            "Added: full mlx-serve bridge — images, speech, music, video and 3D generation as MCP tools",
+            "Added: 6 one-click prompts (poster, portrait, lo-fi track, speech, 3D, video)",
+            "Added: configurable MLX_SERVE_URL / MLX_SERVE_API_KEY / output directory"
+          ]
+        },
+        "zh-CN": {
+          "1.0.0": [
+            "新增：完整的 mlx-serve 桥接 —— 图像、语音、音乐、视频与 3D 生成 MCP 工具",
+            "新增：6 个一键提示词（海报、人像、Lo-Fi 音乐、语音、3D、视频）",
+            "新增：可配置的 MLX_SERVE_URL / MLX_SERVE_API_KEY / 输出目录"
+          ]
+        }
+      }
+    }
+  },
+  "deploymentOptions": [
+    {
+      "name": "Local",
+      "type": "local",
+      "description": "Run the mlx-serve-mcp stdio bridge on your machine, pointed at any mlx-serve instance (local or remote) via MLX_SERVE_URL.",
+      "requires": [
+        {
+          "type": "apiKey",
+          "key": "MLX_SERVE_URL",
+          "description": "Base URL of the mlx-serve instance, e.g. http://192.168.1.10:8080 (required)",
+          "required": true,
+          "defaultValue": "http://192.168.1.10:8080"
+        },
+        {
+          "type": "apiKey",
+          "key": "MLX_SERVE_API_KEY",
+          "description": "Bearer token for the mlx-serve instance (only if it is behind auth; optional)",
+          "required": false
+        },
+        {
+          "type": "env",
+          "key": "MLX_SERVE_OUTPUT_DIR",
+          "description": "Where generated media is saved (default: ~/Downloads/mlx-serve-mcp)",
+          "required": false
+        }
+      ],
+      "configuration": {
+        "server": {
+          "type": "stdio",
+          "command": "mlx-serve-mcp",
+          "args": [],
+          "env": {
+            "MLX_SERVE_URL": "http://192.168.1.10:8080",
+            "MLX_SERVE_API_KEY": "${MLX_SERVE_API_KEY}"
+          }
+        }
+      }
+    }
+  ],
+  "capabilities": {
+    "tools": [
+      {
+        "name": "health_check",
+        "description": "Check connectivity to the remote mlx-serve instance (GET /health). Use this first to verify the ip:port is reachable.",
+        "parameters": []
+      },
+      {
+        "name": "list_models",
+        "description": "List models available on the remote mlx-serve server with their capability flags (chat/vision, image, speech, music, video, 3D).",
+        "parameters": []
+      },
+      {
+        "name": "load_model",
+        "description": "Explicitly cold-load a model into GPU memory (optionally as the server-wide default).",
+        "parameters": [
+          {
+            "name": "model",
+            "type": "string",
+            "description": "Model id from list_models, or an absolute path to a model directory on the server",
+            "required": true
+          },
+          {
+            "name": "make_default",
+            "type": "boolean",
+            "description": "Also promote it to the server-wide default model",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "unload_model",
+        "description": "Free a model's GPU memory on the remote server (it stays registered and can be reloaded).",
+        "parameters": [
+          {
+            "name": "model",
+            "type": "string",
+            "description": "Model id to evict",
+            "required": true
+          }
+        ]
+      },
+      {
+        "name": "generate_image",
+        "description": "Generate an image from a text prompt; saved as a local PNG with its path returned. Defaults to ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit (best at text in images); use Runpod/FLUX.2-klein-4B for faces.",
+        "parameters": [
+          {
+            "name": "prompt",
+            "type": "string",
+            "description": "Text description of the image",
+            "required": true
+          },
+          {
+            "name": "model",
+            "type": "string",
+            "description": "Model id (from list_models); defaults to MLX_SERVE_IMAGE_MODEL",
+            "required": false
+          },
+          {
+            "name": "size",
+            "type": "string",
+            "description": "Output dimensions, e.g. 1024x1024",
+            "required": false
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "description": "Optional random seed for reproducibility",
+            "required": false
+          },
+          {
+            "name": "steps",
+            "type": "number",
+            "description": "Sampling steps (backend-specific)",
+            "required": false
+          },
+          {
+            "name": "cfg_scale",
+            "type": "number",
+            "description": "Classifier-free guidance scale (SDXL/Flux style)",
+            "required": false
+          },
+          {
+            "name": "guidance_scale",
+            "type": "number",
+            "description": "Guidance scale (MAGE-Flow style)",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "edit_image",
+        "description": "Edit an existing image with a text prompt; saved as a local PNG. Defaults to Runpod/FLUX.2-klein-4B-mflux-4bit (best for faces).",
+        "parameters": [
+          {
+            "name": "image_path",
+            "type": "string",
+            "description": "Absolute or ~-relative path to the source image (PNG/JPEG)",
+            "required": true
+          },
+          {
+            "name": "prompt",
+            "type": "string",
+            "description": "Description of the desired edit",
+            "required": true
+          },
+          {
+            "name": "model",
+            "type": "string",
+            "description": "Model id; defaults to MLX_SERVE_IMAGE_EDIT_MODEL",
+            "required": false
+          },
+          {
+            "name": "size",
+            "type": "string",
+            "description": "Output dimensions",
+            "required": false
+          },
+          {
+            "name": "strength",
+            "type": "number",
+            "description": "Denoising strength 0..1 (how much to change the image)",
+            "required": false
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "description": "Optional random seed",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "text_to_speech",
+        "description": "Synthesize speech from text; returns a local WAV file path. Defaults to Qwen3-0.6B-TTS-12Hz-MLX-2bit.",
+        "parameters": [
+          {
+            "name": "text",
+            "type": "string",
+            "description": "The text to speak",
+            "required": true
+          },
+          {
+            "name": "model",
+            "type": "string",
+            "description": "TTS model id; defaults to MLX_SERVE_TTS_MODEL",
+            "required": false
+          },
+          {
+            "name": "voice",
+            "type": "string",
+            "description": "Voice name or id (backend-specific)",
+            "required": false
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "description": "Playback speed multiplier 0.25..4.0",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "generate_music",
+        "description": "Generate a music track from a style prompt; returns a local WAV path. Supports text2music, cover and complete tasks, plus bpm/keyscale/vocal_language.",
+        "parameters": [
+          {
+            "name": "prompt_style",
+            "type": "string",
+            "description": "Style description, e.g. 'lo-fi hip hop, mellow piano'",
+            "required": true
+          },
+          {
+            "name": "model",
+            "type": "string",
+            "description": "Music model id; defaults to MLX_SERVE_MUSIC_MODEL",
+            "required": false
+          },
+          {
+            "name": "lyrics",
+            "type": "string",
+            "description": "Optional lyrics for vocal tracks",
+            "required": false
+          },
+          {
+            "name": "instrumental",
+            "type": "boolean",
+            "description": "True for no vocals",
+            "required": false
+          },
+          {
+            "name": "duration_seconds",
+            "type": "number",
+            "description": "Target length 10..600 (default 60)",
+            "required": false
+          },
+          {
+            "name": "bpm",
+            "type": "number",
+            "description": "Tempo, e.g. 120",
+            "required": false
+          },
+          {
+            "name": "keyscale",
+            "type": "string",
+            "description": "Musical key, e.g. 'C major'",
+            "required": false
+          },
+          {
+            "name": "timesignature",
+            "type": "string",
+            "description": "Time signature, e.g. '4/4'",
+            "required": false
+          },
+          {
+            "name": "vocal_language",
+            "type": "string",
+            "description": "Vocal language code, e.g. 'en', 'zh'",
+            "required": false
+          },
+          {
+            "name": "task",
+            "type": "string",
+            "description": "'text2music' (default) | 'cover' | 'complete'",
+            "required": false
+          },
+          {
+            "name": "src_audio_path",
+            "type": "string",
+            "description": "Local WAV (10-600 s) source for cover/complete tasks",
+            "required": false
+          },
+          {
+            "name": "cover_strength",
+            "type": "number",
+            "description": "0..1 how strongly to follow the cover source",
+            "required": false
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "description": "Optional seed for reproducibility",
+            "required": false
+          },
+          {
+            "name": "steps",
+            "type": "number",
+            "description": "Optional sampling steps (music3 backend)",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "generate_video",
+        "description": "Generate a short video from a text prompt; returns a local MP4 path (H.264, optional AAC soundtrack). Supports first/last frame conditioning.",
+        "parameters": [
+          {
+            "name": "prompt",
+            "type": "string",
+            "description": "Scene description for the video",
+            "required": true
+          },
+          {
+            "name": "model",
+            "type": "string",
+            "description": "Video model id; defaults to MLX_SERVE_VIDEO_MODEL",
+            "required": false
+          },
+          {
+            "name": "num_frames",
+            "type": "number",
+            "description": "Frame count (LTX: 8N+1 ladder; H3: 17k+5)",
+            "required": false
+          },
+          {
+            "name": "width",
+            "type": "number",
+            "description": "Pixel width (LTX/H3 default 256; must be divisible by 64)",
+            "required": false
+          },
+          {
+            "name": "height",
+            "type": "number",
+            "description": "Pixel height",
+            "required": false
+          },
+          {
+            "name": "steps",
+            "type": "number",
+            "description": "Sampling steps (backend-specific)",
+            "required": false
+          },
+          {
+            "name": "turbo",
+            "type": "boolean",
+            "description": "Use the distilled 4-step turbo path where available",
+            "required": false
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "description": "Optional seed",
+            "required": false
+          },
+          {
+            "name": "cfg_scale",
+            "type": "number",
+            "description": "Guidance scale",
+            "required": false
+          },
+          {
+            "name": "first_frame_image_path",
+            "type": "string",
+            "description": "Optional local image to condition the first frame",
+            "required": false
+          },
+          {
+            "name": "last_frame_image_path",
+            "type": "string",
+            "description": "Optional local image to condition the final frame",
+            "required": false
+          },
+          {
+            "name": "audio_path",
+            "type": "string",
+            "description": "Optional local WAV to mix as soundtrack (must match frame duration)",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "generate_3d",
+        "description": "Generate a textured 3D mesh (GLB) from a subject image; the image should be a clean cutout with real alpha transparency.",
+        "parameters": [
+          {
+            "name": "image_path",
+            "type": "string",
+            "description": "Local PNG/JPEG of the subject (alpha cutout works best)",
+            "required": true
+          },
+          {
+            "name": "model",
+            "type": "string",
+            "description": "3D mesh model id; defaults to MLX_SERVE_MESH_MODEL",
+            "required": false
+          },
+          {
+            "name": "steps",
+            "type": "number",
+            "description": "Shape sampling steps (default 30)",
+            "required": false
+          },
+          {
+            "name": "octree_resolution",
+            "type": "number",
+            "description": "Mesh grid resolution 64..512 (default 256)",
+            "required": false
+          },
+          {
+            "name": "guidance_scale",
+            "type": "number",
+            "description": "Shape guidance 0..20 (default 5)",
+            "required": false
+          },
+          {
+            "name": "texture",
+            "type": "boolean",
+            "description": "Request the texture-paint stage for a textured GLB",
+            "required": false
+          },
+          {
+            "name": "texture_steps",
+            "type": "number",
+            "description": "Texture painting steps 1..100 when texture=true",
+            "required": false
+          },
+          {
+            "name": "seed",
+            "type": "number",
+            "description": "Optional seed",
+            "required": false
+          }
+        ]
+      }
+    ]
+  }
+}
