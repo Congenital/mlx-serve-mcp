@@ -3,10 +3,7 @@
   "version": "1.0.0",
   "name": "mlx-serve MCP",
   "description": "Bring Apple Silicon AI to your MCP clients — a single stdio bridge to a remote mlx-serve inference server for images, speech, music, video and 3D, with ready-made one-click prompts.",
-  "author": {
-    "name": "Congenital",
-    "url": "https://github.com/Congenital"
-  },
+  "author": "Congenital",
   "homepage": "https://github.com/Congenital/mlx-serve-mcp",
   "license": "MIT",
   "metadata": {
