@@ -4,22 +4,38 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
 DEFAULT_BASE_URL = "http://127.0.0.1:11234"
 DEFAULT_TIMEOUT_SECONDS = 1800.0  # video / music generation can run for many minutes
 
+# Default model ids (overridable via MLX_SERVE_*_MODEL env vars).
+DEFAULT_IMAGE_MODEL = "ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit"
+DEFAULT_IMAGE_EDIT_MODEL = "ddalcu/Mage-Flow-Edit-Turbo-MLX-Serve-8bit"
+DEFAULT_TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+DEFAULT_MUSIC_MODEL = "ddalcu/MiniMax-Music3-MLX-Serve-8bit"
+DEFAULT_VIDEO_MODEL = "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit"
+DEFAULT_MESH_MODEL = "ddalcu/Hunyuan3D-2.1-MLX-Serve-8bit"
+
 
 @dataclass(frozen=True)
 class Config:
-    """Resolved connection + output settings for the MCP server."""
+    """Resolved connection + output + model settings for the MCP server."""
 
     base_url: str  # normalized, no trailing slash, e.g. "http://192.168.1.10:11234"
     api_key: str | None
     output_dir: Path
     timeout_seconds: float
+
+    # Default model ids — used when a tool is called without an explicit ``model``.
+    image_model: str = DEFAULT_IMAGE_MODEL
+    image_edit_model: str = DEFAULT_IMAGE_EDIT_MODEL
+    tts_model: str = DEFAULT_TTS_MODEL
+    music_model: str = DEFAULT_MUSIC_MODEL
+    video_model: str = DEFAULT_VIDEO_MODEL
+    mesh_model: str = DEFAULT_MESH_MODEL
 
 
 def normalize_base_url(raw: str) -> str:
@@ -57,8 +73,18 @@ def build_config(
     api_key: str | None = None,
     output_dir: str | Path | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    image_model: str | None = None,
+    image_edit_model: str | None = None,
+    tts_model: str | None = None,
+    music_model: str | None = None,
+    video_model: str | None = None,
+    mesh_model: str | None = None,
 ) -> Config:
-    """Assemble a Config with normalization + defaults applied."""
+    """Assemble a Config with normalization + defaults applied.
+
+    Model parameters fall back to ``MLX_SERVE_*_MODEL`` env vars, then to
+    the built-in defaults.
+    """
     out_dir = Path(output_dir).expanduser() if output_dir else (
         Path.home() / "Downloads" / "mlx-serve-mcp"
     )
@@ -67,6 +93,12 @@ def build_config(
         api_key=(api_key or None) or None,
         output_dir=out_dir.resolve(),
         timeout_seconds=float(timeout_seconds),
+        image_model=image_model or os.environ.get("MLX_SERVE_IMAGE_MODEL") or DEFAULT_IMAGE_MODEL,
+        image_edit_model=image_edit_model or os.environ.get("MLX_SERVE_IMAGE_EDIT_MODEL") or DEFAULT_IMAGE_EDIT_MODEL,
+        tts_model=tts_model or os.environ.get("MLX_SERVE_TTS_MODEL") or DEFAULT_TTS_MODEL,
+        music_model=music_model or os.environ.get("MLX_SERVE_MUSIC_MODEL") or DEFAULT_MUSIC_MODEL,
+        video_model=video_model or os.environ.get("MLX_SERVE_VIDEO_MODEL") or DEFAULT_VIDEO_MODEL,
+        mesh_model=mesh_model or os.environ.get("MLX_SERVE_MESH_MODEL") or DEFAULT_MESH_MODEL,
     )
 
 
@@ -122,6 +154,12 @@ def load_config(argv: list[str] | None = None) -> Config:
         api_key=args.api_key,
         output_dir=args.output_dir,
         timeout_seconds=timeout,
+        image_model=os.environ.get("MLX_SERVE_IMAGE_MODEL"),
+        image_edit_model=os.environ.get("MLX_SERVE_IMAGE_EDIT_MODEL"),
+        tts_model=os.environ.get("MLX_SERVE_TTS_MODEL"),
+        music_model=os.environ.get("MLX_SERVE_MUSIC_MODEL"),
+        video_model=os.environ.get("MLX_SERVE_VIDEO_MODEL"),
+        mesh_model=os.environ.get("MLX_SERVE_MESH_MODEL"),
     )
 
 

@@ -28,13 +28,22 @@ LIVE = os.environ.get("MLX_SERVE_LIVE") == "1"
 URL = os.environ.get("MLX_SERVE_URL", "192.168.2.6:8000")
 API_KEY = os.environ.get("MLX_SERVE_API_KEY", "private")
 
-# Model ids on the live server (from /v1/models probe).
-IMAGE_MODEL = "ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit"
-IMAGE_EDIT_MODEL = "ddalcu/Mage-Flow-Edit-Turbo-MLX-Serve-8bit"
-TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
-MUSIC_MODEL = "ddalcu/MiniMax-Music3-MLX-Serve-8bit"
-VIDEO_MODEL = "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit"
-MESH_MODEL = "ddalcu/Hunyuan3D-2.1-MLX-Serve-8bit"
+# Model ids — overridable via MLX_SERVE_*_MODEL env vars.
+from mlx_serve_mcp.config import (  # noqa: E402
+    DEFAULT_IMAGE_MODEL,
+    DEFAULT_IMAGE_EDIT_MODEL,
+    DEFAULT_TTS_MODEL,
+    DEFAULT_MUSIC_MODEL,
+    DEFAULT_VIDEO_MODEL,
+    DEFAULT_MESH_MODEL,
+)
+
+IMAGE_MODEL = os.environ.get("MLX_SERVE_IMAGE_MODEL", DEFAULT_IMAGE_MODEL)
+IMAGE_EDIT_MODEL = os.environ.get("MLX_SERVE_IMAGE_EDIT_MODEL", DEFAULT_IMAGE_EDIT_MODEL)
+TTS_MODEL = os.environ.get("MLX_SERVE_TTS_MODEL", DEFAULT_TTS_MODEL)
+MUSIC_MODEL = os.environ.get("MLX_SERVE_MUSIC_MODEL", DEFAULT_MUSIC_MODEL)
+VIDEO_MODEL = os.environ.get("MLX_SERVE_VIDEO_MODEL", DEFAULT_VIDEO_MODEL)
+MESH_MODEL = os.environ.get("MLX_SERVE_MESH_MODEL", DEFAULT_MESH_MODEL)
 
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"

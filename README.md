@@ -34,6 +34,53 @@ CLI flags override environment variables:
 | `--output-dir` | `MLX_SERVE_OUTPUT_DIR` | `~/Downloads/mlx-serve-mcp` | Where generated media files are written |
 | `--timeout` | `MLX_SERVE_TIMEOUT` | `1800` | HTTP timeout in seconds (video/music can take many minutes) |
 
+### Default models
+
+Each media tool accepts an optional `model` argument. When omitted, the tool
+falls back to a configurable default (env var → built-in):
+
+| Env var | Tool | Built-in default |
+|---------|------|-----------------|
+| `MLX_SERVE_IMAGE_MODEL` | `generate_image` | `Runpod/FLUX.2-klein-4B-mflux-4bit` |
+| `MLX_SERVE_IMAGE_EDIT_MODEL` | `edit_image` | `Runpod/FLUX.2-klein-4B-mflux-4bit` |
+| `MLX_SERVE_TTS_MODEL` | `text_to_speech` | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16` |
+| `MLX_SERVE_MUSIC_MODEL` | `generate_music` | `ddalcu/MiniMax-Music3-MLX-Serve-8bit` |
+| `MLX_SERVE_VIDEO_MODEL` | `generate_video` | `ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit` |
+| `MLX_SERVE_MESH_MODEL` | `generate_3d` | `ddalcu/Hunyuan3D-2.1-MLX-Serve-8bit` |
+
+> **Model recommendation** (based on real-world testing on mlx-serve):
+>
+> - `ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit` is fast, but its quality is below
+>   `Runpod/FLUX.2-klein-4B-mflux-4bit` — in particular, face generation tends
+>   to come out distorted.
+> - `ddalcu/Mage-Flow-Edit-Turbo-MLX-Serve-8bit` can hit a weight/parameter
+>   error on mlx-serve (`Model load failed: MissingMageFlowWeight`), which makes
+>   the model unusable.
+> - `mlx-community/flux2-klein-9b-4bit` has a similar load-failure issue.
+>
+> **Bottom line: use `Runpod/FLUX.2-klein-4B-mflux-4bit`** for both
+> `generate_image` and `edit_image` — it is the only image model in this group
+> that both loads reliably and produces good results (including faces).
+
+Set them in your MCP client config to pin the models you actually have
+installed on the server:
+
+```json
+{
+  "mcpServers": {
+    "mlx-serve": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/mlx-serve-mcp", "run", "mlx-serve-mcp", "--url", "192.168.1.10:11234"],
+      "env": {
+        "MLX_SERVE_API_KEY": "private",
+        "MLX_SERVE_IMAGE_MODEL": "ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit",
+        "MLX_SERVE_TTS_MODEL": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+      }
+    }
+  }
+}
+```
+
 ## Wire into your MCP client
 
 Claude Code (`.mcp.json` / `claude mcp add`):

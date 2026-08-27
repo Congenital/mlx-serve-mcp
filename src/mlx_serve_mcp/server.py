@@ -304,6 +304,17 @@ def _get_config() -> Config:
     return mcp._config
 
 
+def _resolve_model(explicit: str | None, cfg_attr: str) -> str | None:
+    """Return the explicit model if given, else the configured default.
+
+    ``cfg_attr`` is a ``Config`` field name (e.g. ``"image_model"``).
+    """
+    if explicit:
+        return explicit
+    cfg = _get_config()
+    return getattr(cfg, cfg_attr)
+
+
 def _output_path(kind: str, suffix: str) -> Path:
     """Timestamped, collision-safe output path under output_dir/<kind>s/."""
     cfg = _get_config()
@@ -462,8 +473,8 @@ async def generate_image(
 
     Args:
         prompt: Text description of the image to generate.
-        model: Optional model id (from list_models). Omit to use the server's
-            default image model.
+        model: Model id (from list_models). Defaults to MLX_SERVE_IMAGE_MODEL
+            (or the built-in default if unset).
         size: Output dimensions, e.g. "512x512" or "1024x1024".
         seed: Optional random seed for reproducibility.
         steps: Sampling steps (backend-specific).
@@ -471,7 +482,7 @@ async def generate_image(
         guidance_scale: Guidance scale (MAGE-Flow style).
     """
     payload: dict[str, Any] = {"prompt": prompt}
-    _optional_add(payload, "model", model)
+    _optional_add(payload, "model", _resolve_model(model, "image_model"))
     _optional_add(payload, "size", size)
     _optional_add(payload, "seed", seed)
     _optional_add(payload, "steps", steps)
@@ -503,14 +514,14 @@ async def edit_image(
     Args:
         image_path: Absolute or ~-relative path to the source image (PNG/JPEG).
         prompt: Description of the desired edit.
-        model: Optional model id.
+        model: Model id. Defaults to MLX_SERVE_IMAGE_EDIT_MODEL.
         size: Output dimensions.
         strength: Denoising strength 0..1 (how much to change the image).
         seed: Optional random seed.
     """
     img_b64, _ = _read_image_file(image_path, field="image_path")
     payload: dict[str, Any] = {"image": img_b64, "prompt": prompt}
-    _optional_add(payload, "model", model)
+    _optional_add(payload, "model", _resolve_model(model, "image_edit_model"))
     _optional_add(payload, "size", size)
     _optional_add(payload, "strength", strength)
     _optional_add(payload, "seed", seed)
@@ -540,14 +551,14 @@ async def text_to_speech(
 
     Args:
         text: The text to speak.
-        model: Optional TTS model id (from list_models).
+        model: TTS model id. Defaults to MLX_SERVE_TTS_MODEL.
         voice: Voice name or id (backend-specific).
         speed: Playback speed multiplier (0.25..4.0, default 1.0).
     """
     if speed is not None and not (0.25 <= speed <= 4.0):
         raise ValueError(f"speed must be in [0.25, 4.0], got {speed}")
     payload: dict[str, Any] = {"text": text}
-    _optional_add(payload, "model", model)
+    _optional_add(payload, "model", _resolve_model(model, "tts_model"))
     _optional_add(payload, "voice", voice)
     _optional_add(payload, "speed", speed)
 
@@ -580,7 +591,7 @@ async def generate_music(
 
     Args:
         prompt_style: Style description, e.g. "lo-fi hip hop, mellow piano".
-        model: Optional music model id (from list_models).
+        model: Music model id. Defaults to MLX_SERVE_MUSIC_MODEL.
         lyrics: Optional lyrics for vocal tracks.
         instrumental: True for no vocals (default true for text2music).
         duration_seconds: Target length 10..600 (default 60).
@@ -600,7 +611,7 @@ async def generate_music(
     if task is not None and task not in ("text2music", "cover", "complete"):
         raise ValueError(f"task must be 'text2music', 'cover' or 'complete', got {task!r}")
     payload: dict[str, Any] = {"prompt": prompt_style}
-    _optional_add(payload, "model", model)
+    _optional_add(payload, "model", _resolve_model(model, "music_model"))
     _optional_add(payload, "lyrics", lyrics)
     _optional_add(payload, "instrumental", instrumental)
     _optional_add(payload, "duration_seconds", duration_seconds)
@@ -651,7 +662,7 @@ async def generate_video(
 
     Args:
         prompt: Scene description for the video.
-        model: Optional video model id (from list_models).
+        model: Video model id. Defaults to MLX_SERVE_VIDEO_MODEL.
         num_frames: Frame count. LTX backends use an 8N+1 ladder (default 9;
             e.g. 9/25/33/49/57/81...); MiniMax-H3 uses 17k+5 (default 56).
         width: Pixel width (defaults: LTX 384, H3 256). Two-stage pipelines
@@ -668,7 +679,7 @@ async def generate_video(
             duration).
     """
     payload: dict[str, Any] = {"prompt": prompt}
-    _optional_add(payload, "model", model)
+    _optional_add(payload, "model", _resolve_model(model, "video_model"))
     _optional_add(payload, "num_frames", num_frames)
     _optional_add(payload, "width", width)
     _optional_add(payload, "height", height)
@@ -728,7 +739,7 @@ async def generate_3d(
 
     Args:
         image_path: Absolute or ~-relative path to a local PNG/JPEG of the subject.
-        model: Optional 3D mesh model id (from list_models).
+        model: 3D mesh model id. Defaults to MLX_SERVE_MESH_MODEL.
         steps: Shape sampling steps (default 30).
         octree_resolution: Mesh grid resolution in [64, 512] (default 256).
         guidance_scale: Shape guidance in [0, 20] (default 5).
@@ -745,7 +756,7 @@ async def generate_3d(
         raise ValueError(f"texture_steps must be in [1, 100], got {texture_steps}")
     img_b64, img_path = _read_image_file(image_path, field="image_path")
     payload: dict[str, Any] = {"image": img_b64}
-    _optional_add(payload, "model", model)
+    _optional_add(payload, "model", _resolve_model(model, "mesh_model"))
     _optional_add(payload, "steps", steps)
     _optional_add(payload, "octree_resolution", octree_resolution)
     _optional_add(payload, "guidance_scale", guidance_scale)
