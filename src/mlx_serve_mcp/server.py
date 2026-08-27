@@ -25,6 +25,7 @@ from typing import Any, Callable, Coroutine, get_type_hints
 from .client import MlxServeClient, MlxServeError
 from .config import Config, DEFAULT_TIMEOUT_SECONDS
 from . import prompts as prompts_module
+from . import resources as resources_module
 from .video import mux_video_mp4, write_wav
 
 # ── MCP protocol types ─────────────────────────────────────────────────
@@ -154,6 +155,7 @@ class McpServer:
             "capabilities": {
                 "tools": {},
                 "prompts": {},
+                "resources": {},
             },
             "serverInfo": {
                 "name": self.name,
@@ -205,6 +207,17 @@ class McpServer:
             raise ValueError("prompts/get requires a 'name' string")
         return prompts_module.get_prompt(name, arguments)
 
+    async def _handle_resources_list(self, params: dict[str, Any] | None) -> dict[str, Any]:
+        """Handle resources/list request."""
+        return {"resources": resources_module.list_resources()}
+
+    async def _handle_resources_read(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle resources/read request."""
+        uri = params.get("uri")
+        if not isinstance(uri, str):
+            raise ValueError("resources/read requires a 'uri' string")
+        return await resources_module.read_resource(uri, client=self._client)
+
     async def _handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
         """Dispatch a JSON-RPC request to the appropriate handler."""
         method = request.get("method")
@@ -221,6 +234,10 @@ class McpServer:
             result = await self._handle_prompts_list(params)
         elif method == "prompts/get":
             result = await self._handle_prompts_get(params or {})
+        elif method == "resources/list":
+            result = await self._handle_resources_list(params)
+        elif method == "resources/read":
+            result = await self._handle_resources_read(params or {})
         elif method == "notifications/initialized":
             # Notification: no response needed
             return None

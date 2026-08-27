@@ -124,6 +124,33 @@ Claude Desktop (`claude_desktop_config.json`) uses the same `command`/`args` sha
 
 Output files land under `<output-dir>/{images,audio,video,mesh}/` with timestamped names; every tool reports absolute paths in its result text.
 
+## Prompts
+
+One-click prompt templates exposed via `prompts/list` / `prompts/get`:
+
+| Prompt | What it does |
+|--------|-------------|
+| `create_poster` | Text-centric poster/typography (Mage-Flow-Turbo — best at text rendering) |
+| `portrait_photo` | Realistic portrait (FLUX.2-klein-4B — best for faces) |
+| `lofi_track` | Lo-fi hip-hop music track (MiniMax-Music3) |
+| `speak_text` | Natural TTS (Qwen3-TTS) |
+| `image_to_3d` | Cutout photo → textured GLB (Hunyuan3D-2.1) |
+| `short_video` | 9-frame preview video (fastest path) |
+
+## Resources
+
+Live data sources exposed via `resources/list` / `resources/read`:
+
+| Resource | URI | Content |
+|----------|-----|---------|
+| `models` | `mlx-serve://models` | Live model inventory with capability flags |
+| `server_status` | `mlx-serve://status` | Health, version, loaded models |
+| `model_guidance` | `mlx-serve://guidance` | Recommended model per tool (real-world tested) |
+
+## LobeHub Marketplace
+
+This package is published on the [LobeHub MCP Marketplace](https://lobehub.com/mcp/congenital-mlx-serve-mcp) with a full [`lhm.plugin.json`](lhm.plugin.json) manifest and a [`skill.md`](skill.md) for agent discovery.
+
 ## Design notes
 
 - **Video**: mlx-serve answers with *raw* RGB8 frame bytes (+ optional PCM s16le track), not an encoded file. This bridge muxes them into H.264/AAC MP4 via ffmpeg — preferring system `ffmpeg`, falling back to the static binary bundled with the [`imageio-ffmpeg`](https://pypi.org/project/imageio-ffmpeg/) dependency, so no separate install is needed.

@@ -66,7 +66,11 @@
     }
   ],
   "capabilities": {
-    "tools": [
+    "tools": [],
+    "prompts": [],
+    "resources": []
+  },
+  "tools": [
       {
         "name": "health_check",
         "description": "Check connectivity to the remote mlx-serve instance (GET /health). Use this first to verify the ip:port is reachable.",
@@ -449,6 +453,48 @@
           }
         ]
       }
+    ],
+    "prompts": [
+      {
+        "name": "create_poster",
+        "description": "Design a text-centric poster or typographic artwork. Uses Mage-Flow-Turbo, the most reliable model for rendering text in images."
+      },
+      {
+        "name": "portrait_photo",
+        "description": "Generate a realistic portrait or photo-real scene. Uses FLUX.2-klein-4B, the best model for faces and photo-real detail."
+      },
+      {
+        "name": "lofi_track",
+        "description": "Generate a lo-fi hip-hop music track with optional vocals. Uses MiniMax-Music3 for the best music quality on mlx-serve."
+      },
+      {
+        "name": "speak_text",
+        "description": "Convert text to natural speech. Uses Qwen3-TTS, the most natural-sounding TTS model on mlx-serve."
+      },
+      {
+        "name": "image_to_3d",
+        "description": "Turn a clean cutout photo into a textured 3D model (GLB) for Blender, three.js or Quick Look."
+      },
+      {
+        "name": "short_video",
+        "description": "Generate a short video clip (9 frames, 256x256) — the fastest video path on mlx-serve, good for previews."
+      }
+    ],
+    "resources": [
+      {
+        "name": "models",
+        "description": "Live model inventory from the remote mlx-serve instance — model ids, capability flags (chat, vision, image, speech, music, video, 3D) and load status.",
+        "uri": "mlx-serve://models"
+      },
+      {
+        "name": "server_status",
+        "description": "Health and status of the remote mlx-serve instance — reachable, version, loaded models, GPU info.",
+        "uri": "mlx-serve://status"
+      },
+      {
+        "name": "model_guidance",
+        "description": "Recommended model choices for each media tool based on real-world testing (which model for text rendering, faces, music, video, 3D).",
+        "uri": "mlx-serve://guidance"
+      }
     ]
   }
-}
