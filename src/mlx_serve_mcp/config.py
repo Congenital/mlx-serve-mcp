@@ -12,8 +12,8 @@ DEFAULT_BASE_URL = "http://127.0.0.1:11234"
 DEFAULT_TIMEOUT_SECONDS = 1800.0  # video / music generation can run for many minutes
 
 # Default model ids (overridable via MLX_SERVE_*_MODEL env vars).
-DEFAULT_IMAGE_MODEL = "ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit"
-DEFAULT_IMAGE_EDIT_MODEL = "ddalcu/Mage-Flow-Edit-Turbo-MLX-Serve-8bit"
+DEFAULT_IMAGE_MODEL = "Runpod/FLUX.2-klein-4B-mflux-4bit"
+DEFAULT_IMAGE_EDIT_MODEL = "Runpod/FLUX.2-klein-4B-mflux-4bit"
 DEFAULT_TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
 DEFAULT_MUSIC_MODEL = "ddalcu/MiniMax-Music3-MLX-Serve-8bit"
 DEFAULT_VIDEO_MODEL = "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit"
