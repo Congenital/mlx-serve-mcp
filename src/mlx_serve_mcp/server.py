@@ -382,24 +382,25 @@ async def list_models() -> str:
     lines: list[str] = []
     for i, entry in enumerate(entries):
         mid = entry.get("id") or entry.get("model") or "?"
-        caps: list[str] = []
-        if _model_flag(entry, "has_image_engine"):
-            caps.append("image")
-        audio_engine = entry.get("has_audio_engine")
-        if isinstance(audio_engine, bool) and audio_engine:
-            caps.append("music" if entry.get("has_music_backend") else "speech(tts)")
-        if entry.get("has_video_engine"):
-            caps.append("video")
-        if entry.get("has_mesh_engine"):
-            caps.append("3d")
-        if _model_flag(entry, "has_chat"):
-            vision = "vision+chat" if _model_flag(entry, "has_vision") else "chat"
-            caps.insert(0, vision)
+        caps_raw = entry.get("capabilities")
+        caps = [str(c) for c in caps_raw] if isinstance(caps_raw, list) else []
+        # Normalize: a model with both audio+music handles speech AND music.
+        if "audio" in caps and "music" in caps:
+            caps.remove("audio")
+            caps = ["speech+music"] + [c for c in caps if c != "speech"]
+        elif "audio" in caps:
+            caps = ["speech"] + [c for c in caps if c != "audio"]
         state = entry.get("state")
-        default = " [default]" if entry.get("is_default") else ""
-        loaded = f" ({state})" if isinstance(state, str) and state != "ready" else ""
-        suffix = f" — capabilities: {', '.join(caps)}" if caps else ""
-        lines.append(f"{i + 1}. {mid}{default}{loaded}{suffix}")
+        loaded = entry.get("loaded")
+        status = ""
+        if loaded is True or state == "ready":
+            status = " [loaded]"
+        elif state:
+            status = f" [{state}]"
+        resident = entry.get("bytes_resident")
+        mem = f", {_fmt_size(float(resident))} in memory" if isinstance(resident, (int, float)) and resident > 0 else ""
+        cap_str = f" — capabilities: {', '.join(caps)}" if caps else ""
+        lines.append(f"{i + 1}. {mid}{status}{mem}{cap_str}")
     header = f"{len(entries)} model(s) on the server:\n"
     return header + "\n".join(lines)
 
@@ -421,7 +422,7 @@ async def load_model(
     result = await _get_client().load_model(model, make_default=make_default)
     entry = result.get("model") if isinstance(result, dict) else None
     state = entry.get("state", "loaded") if isinstance(entry, dict) else "loaded"
-    resident = entry.get("resident_bytes") if isinstance(entry, dict) else None
+    resident = entry.get("bytes_resident") if isinstance(entry, dict) else None
     extra = ""
     if isinstance(resident, (int, float)) and resident > 0:
         extra = f", resident {_fmt_size(float(resident))}"
@@ -561,6 +562,7 @@ async def text_to_speech(
 @mcp.tool()
 async def generate_music(
     prompt_style: str,
+    model: str | None = None,
     lyrics: str | None = None,
     instrumental: bool | None = None,
     duration_seconds: int | None = None,
@@ -578,6 +580,7 @@ async def generate_music(
 
     Args:
         prompt_style: Style description, e.g. "lo-fi hip hop, mellow piano".
+        model: Optional music model id (from list_models).
         lyrics: Optional lyrics for vocal tracks.
         instrumental: True for no vocals (default true for text2music).
         duration_seconds: Target length 10..600 (default 60).
@@ -597,6 +600,7 @@ async def generate_music(
     if task is not None and task not in ("text2music", "cover", "complete"):
         raise ValueError(f"task must be 'text2music', 'cover' or 'complete', got {task!r}")
     payload: dict[str, Any] = {"prompt": prompt_style}
+    _optional_add(payload, "model", model)
     _optional_add(payload, "lyrics", lyrics)
     _optional_add(payload, "instrumental", instrumental)
     _optional_add(payload, "duration_seconds", duration_seconds)
@@ -626,6 +630,7 @@ async def generate_music(
 @mcp.tool()
 async def generate_video(
     prompt: str,
+    model: str | None = None,
     num_frames: int | None = None,
     width: int | None = None,
     height: int | None = None,
@@ -646,6 +651,7 @@ async def generate_video(
 
     Args:
         prompt: Scene description for the video.
+        model: Optional video model id (from list_models).
         num_frames: Frame count. LTX backends use an 8N+1 ladder (default 9;
             e.g. 9/25/33/49/57/81...); MiniMax-H3 uses 17k+5 (default 56).
         width: Pixel width (defaults: LTX 384, H3 256). Two-stage pipelines
@@ -662,6 +668,7 @@ async def generate_video(
             duration).
     """
     payload: dict[str, Any] = {"prompt": prompt}
+    _optional_add(payload, "model", model)
     _optional_add(payload, "num_frames", num_frames)
     _optional_add(payload, "width", width)
     _optional_add(payload, "height", height)
@@ -704,6 +711,7 @@ async def generate_video(
 @mcp.tool()
 async def generate_3d(
     image_path: str,
+    model: str | None = None,
     steps: int | None = None,
     octree_resolution: int | None = None,
     guidance_scale: float | None = None,
@@ -720,6 +728,7 @@ async def generate_3d(
 
     Args:
         image_path: Absolute or ~-relative path to a local PNG/JPEG of the subject.
+        model: Optional 3D mesh model id (from list_models).
         steps: Shape sampling steps (default 30).
         octree_resolution: Mesh grid resolution in [64, 512] (default 256).
         guidance_scale: Shape guidance in [0, 20] (default 5).
@@ -736,6 +745,7 @@ async def generate_3d(
         raise ValueError(f"texture_steps must be in [1, 100], got {texture_steps}")
     img_b64, img_path = _read_image_file(image_path, field="image_path")
     payload: dict[str, Any] = {"image": img_b64}
+    _optional_add(payload, "model", model)
     _optional_add(payload, "steps", steps)
     _optional_add(payload, "octree_resolution", octree_resolution)
     _optional_add(payload, "guidance_scale", guidance_scale)
