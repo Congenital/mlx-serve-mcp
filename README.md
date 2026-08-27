@@ -1,4 +1,5 @@
-[![MCP Badge](https://lobehub.com/badge/mcp/congenital-mlx-serve-mcp?style=for-the-badge)](https://lobehub.com/mcp/congenital-mlx-serve-mcp)
+[![MCP Badge](https://lobehub.com/badge/mcp-full/congenital-mlx-serve-mcp?theme=light)](https://lobehub.com/mcp/congenital-mlx-serve-mcp)
+
 # mlx-serve-mcp
 
 **MCP server that turns a remote [mlx-serve](https://github.com/ddalcu/mlx-serve) instance into callable tools** — so any MCP client (Claude Code, Claude Desktop, Cline, ...) on any device can generate images, speech, music, video and 3D meshes through your Mac's `ip:port`.
