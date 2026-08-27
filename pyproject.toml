@@ -1,0 +1,29 @@
+[project]
+name = "mlx-serve-mcp"
+version = "0.1.0"
+description = "MCP server exposing a remote mlx-serve instance (image / video / speech / music / 3D generation) as MCP tools"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "andy" }]
+keywords = ["mcp", "mlx-serve", "llm", "image-generation", "tts", "music", "video", "3d"]
+dependencies = [
+    "httpx>=0.27",
+    "imageio-ffmpeg>=0.5",
+]
+
+[project.scripts]
+mlx-serve-mcp = "mlx_serve_mcp.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mlx_serve_mcp"]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

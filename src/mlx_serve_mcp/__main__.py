@@ -1,0 +1,31 @@
+"""CLI entry point: ``mlx-serve-mcp`` / ``python -m mlx_serve_mcp``."""
+
+from __future__ import annotations
+
+import sys
+
+from .config import load_config
+from .server import create_server
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        config = load_config(argv)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    app = create_server(config)
+
+    # stdio transport: logs must never touch stdout (it is the protocol pipe).
+    print(
+        f"mlx-serve-mcp: bridging MCP clients to {config.base_url} "
+        f"(output dir: {config.output_dir})",
+        file=sys.stderr,
+    )
+    app.run()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
