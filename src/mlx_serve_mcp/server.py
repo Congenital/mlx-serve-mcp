@@ -7,15 +7,11 @@ process lifetime (the stdio transport is one session per process).
 
 Tool groups:
 * **generation** — proxy the remote mlx-serve media endpoints (image, image-edit,
-  speech, music, video, 3D).
-* **files**      — read / write / edit / search / list local files.
-* **shell**      — run local commands (foreground or background).
-* **processes**  — poll / kill background processes.
-* **web**        — web search + fetch-based page reading.
-* **memory**     — a small persistent note store.
-* **tasks**      — background / scheduled command jobs.
+  speech, music, video, 3D). This is the only group currently registered.
 
-Plus live **resources** (models, status, guidance) and one-click **prompts**.
+The other tool modules (files, shell, processes, web, memory, tasks) and the
+resources/prompts registrations are intentionally not wired in; see
+``register_all`` and the commented-out registrations below.
 """
 
 from __future__ import annotations
@@ -29,23 +25,13 @@ from .config import Config
 from .state import State
 from .tools import Deps, register_all
 
-INSTRUCTIONS = f"""\
-You are backed by mlx-serve-mcp, a bridge to a remote mlx-serve inference server
-(base URL configured at startup) plus a local toolset on the machine hosting this
-server.
+INSTRUCTIONS = """\
+You are backed by mlx-serve-mcp, a bridge to a remote mlx-serve inference
+server (base URL configured at startup).
 
-Generation (remote mlx-serve): generate_image, edit_image, generate_speech,
-generate_music, generate_video, generate_3d. Artifacts are written under the
-configured output dir and returned inline where the MCP content model allows.
-
-Local: read_file, write_file, edit_file, search_files, list_files, shell
-(foreground or background), list_processes, read_process_output, kill_process,
-web_search, browse, save_memory, recall_memory, clear_memory, create_task,
-list_tasks, cancel_task. Relative paths resolve against the server's working
-directory.
-
-Inspect the remote model inventory and health via the mlx-serve://models and
-mlx-serve://status resources; mlx-serve://guidance explains model selection.
+Available tools: generate_image, edit_image, generate_speech, generate_music,
+generate_video, generate_3d. Artifacts are written under the configured output
+dir; tools return only the saved path.
 """
 
 
@@ -77,6 +63,7 @@ def create_server(config: Config) -> FastMCP:
 
     deps = Deps(config=config, client=client, state=state)
     register_all(mcp, deps)
-    resources_mod.register(mcp, deps)
-    prompts_mod.register(mcp)
+    # Intentionally NOT registered (hidden from the MCP tool list, code kept):
+    #   resources_mod.register(mcp, deps)   # mlx-serve://status|models|guidance
+    #   prompts_mod.register(mcp)           # portrait / poster / lofi_track / song / short_video
     return mcp

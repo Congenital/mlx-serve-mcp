@@ -24,7 +24,9 @@ capabilities at once:
 
 ### Generation (remote mlx-serve)
 `generate_image`, `edit_image`, `generate_speech`, `generate_music`, `generate_video`,
-`generate_3d`. Media is returned inline where the MCP content model allows and always saved under
+`generate_3d`. Every tool streams its artifact straight to a file under the
+  output dir and returns only a text summary with the saved path (no inline
+  base64 payloads).
 the configured `--output-dir`.
 
 ### Local

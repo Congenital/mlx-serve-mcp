@@ -40,7 +40,7 @@
   "tools": [
     {
       "name": "generate_image",
-      "description": "Generate an image from a text prompt via the remote mlx-serve instance. Returns the image inline and saves it to disk.",
+      "description": "Generate an image from a text prompt via the remote mlx-serve instance. Saves the image to disk and returns the saved path.",
       "parameters": [
         { "name": "prompt", "type": "string", "description": "What the image should depict.", "required": true },
         { "name": "model", "type": "string", "description": "Model id (defaults to the configured image model).", "required": false },
@@ -62,7 +62,7 @@
     },
     {
       "name": "generate_speech",
-      "description": "Speak a line of text aloud (text-to-speech). Returns audio inline and saves a WAV.",
+      "description": "Speak a line of text aloud (text-to-speech). Saves a WAV and returns the saved path.",
       "parameters": [
         { "name": "text", "type": "string", "description": "Exactly the words to speak.", "required": true },
         { "name": "model", "type": "string", "description": "TTS model id.", "required": false },

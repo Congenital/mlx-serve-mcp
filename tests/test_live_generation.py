@@ -44,29 +44,25 @@ async def test_list_models(client):
 @pytest.mark.asyncio
 async def test_generate_image(client, tmp_path):
     cfg = load_config([])
-    pngs = await client.generate_image(prompt="a red fox in the snow", model=cfg.image_model, size="512x512")
-    assert pngs and pngs[0][:4] == b"\x89PNG"
-    out = tmp_path / "fox.png"
-    out.write_bytes(pngs[0])
-    assert out.stat().st_size > 0
+    out = await client.generate_image(prompt="a red fox in the snow", model=cfg.image_model,
+                                      size="512x512", path=tmp_path / "fox.png")
+    assert out.exists() and out.stat().st_size > 0
+    assert out.read_bytes()[:4] == b"\x89PNG"
 
 
 @pytest.mark.asyncio
 async def test_generate_speech(client, tmp_path):
     cfg = load_config([])
-    wav = await client.generate_speech(text="hello world", model=cfg.tts_model)
-    assert wav[:4] == b"RIFF"
-    (tmp_path / "hello.wav").write_bytes(wav)
+    out = await client.generate_speech(text="hello world", model=cfg.tts_model,
+                                       path=tmp_path / "hello.wav")
+    assert out.read_bytes()[:4] == b"RIFF"
 
 
 @pytest.mark.asyncio
 async def test_generate_video_and_mux(client, tmp_path):
     cfg = load_config([])
-    result = await client.generate_video(prompt="a slow pan across a calm sea", model=cfg.video_model, seconds=2)
-    assert result.frames > 0 and result.width > 0
     out = tmp_path / "clip.mp4"
-    video_mod.mux_video_mp4(
-        result.rgb_bytes, result.width, result.height, result.fps, out,
-        result.audio_pcm_s16le, result.audio_sample_rate, result.audio_channels,
-    )
+    result = await client.generate_video(prompt="a slow pan across a calm sea", model=cfg.video_model,
+                                         seconds=2, path=out)
+    assert result.frames > 0 and result.width > 0
     assert out.exists() and out.stat().st_size > 0

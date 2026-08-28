@@ -28,13 +28,13 @@ class Deps:
 
 
 def register_all(mcp: "FastMCP", deps: Deps) -> None:
-    """Register every tool module onto ``mcp``."""
-    from . import files, generation, memory, processes, shell, tasks, web
+    """Register the media-generation tool group onto ``mcp``.
+
+    Only the remote mlx-serve generation tools are exposed. The other tool
+    modules (files, shell, processes, web, memory, tasks) stay in the codebase
+    but are intentionally NOT registered, so the MCP tool list contains just
+    the six generation tools. Re-add a line below to expose a group again.
+    """
+    from . import generation
 
     generation.register(mcp, deps)
-    files.register(mcp, deps)
-    shell.register(mcp, deps)
-    processes.register(mcp, deps)
-    web.register(mcp, deps)
-    memory.register(mcp, deps)
-    tasks.register(mcp, deps)

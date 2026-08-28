@@ -1,14 +1,14 @@
 """Generation tools: proxy the remote mlx-serve media endpoints.
 
 Each tool calls the matching :class:`~mlx_serve_mcp.client.MlxServeClient`
-method, writes the artifact under ``config.output_dir`` (so it survives the
-session), and returns both an inline MCP content block (so clients can render
-it) and a text summary carrying the saved path and metadata.
+method, which streams the artifact straight to a file under
+``config.output_dir`` and returns the saved path; the tools therefore only
+ever return a short text summary (no inline base64 payloads).
 
 Return contract:
-* image  -> ``[TextContent, ImageContent]``
-* audio  -> ``[TextContent, AudioContent]`` (text-only on SDKs without AudioContent)
-* video  -> ``[TextContent]`` with the MP4 path (no standard MCP video block)
+* image  -> ``[TextContent]`` with the PNG path
+* audio  -> ``[TextContent]`` with the WAV path
+* video  -> ``[TextContent]`` with the MP4 path
 * 3d     -> ``[TextContent]`` with the GLB path
 """
 
@@ -20,15 +20,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import mcp.types as mcp_types
-
-try:  # AudioContent is the newest content block; fall back gracefully.
-    from mcp.types import AudioContent
-except ImportError:  # pragma: no cover - older SDK
-    AudioContent = None  # type: ignore
-
-# Imported at runtime (not just for type-checking): generate_video muxes the
-# decoded frames through ffmpeg. The video module has no SDK dependency.
-from .. import video as video_mod
 
 if TYPE_CHECKING:  # pragma: no cover
     from mcp.server.fastmcp import FastMCP
@@ -43,15 +34,13 @@ def _stamp() -> str:
     return time.strftime("%Y%m%d-%H%M%S")
 
 
+def _out(config: "Config", subdir: str, ext: str) -> Path:
+    """Target path under ``config.output_dir`` for a fresh artifact."""
+    return Path(config.output_dir) / subdir / f"{_stamp()}{ext}"
+
+
 def _text(text: str) -> mcp_types.TextContent:
     return mcp_types.TextContent(type="text", text=text)
-
-
-def _save(config: "Config", subdir: str, data: bytes, ext: str) -> Path:
-    out = Path(config.output_dir) / subdir / f"{_stamp()}{ext}"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(data)
-    return out
 
 
 def register(mcp: "FastMCP", deps: Deps) -> None:
@@ -78,17 +67,15 @@ def register(mcp: "FastMCP", deps: Deps) -> None:
             seed: Optional random seed for reproducibility.
         """
         model = model or config.image_model
-        pngs = await client.generate_image(prompt=prompt, model=model, size=size, n=1, seed=seed)
-        path = _save(config, "images", pngs[0], ".png")
+        path = await client.generate_image(
+            prompt=prompt, model=model, size=size, n=1, seed=seed,
+            path=_out(config, "images", ".png"),
+        )
         summary = (
             f"Generated image ({model}, {size}) -> {path}\n"
             f"prompt: {prompt}" + (f"\nseed: {seed}" if seed is not None else "")
         )
-        blocks: list[Any] = [_text(summary)]
-        blocks.append(
-            mcp_types.ImageContent(type="image", data=base64.b64encode(pngs[0]).decode(), mimeType="image/png")
-        )
-        return blocks
+        return [_text(summary)]
 
     @mcp.tool()
     async def edit_image(
@@ -113,13 +100,12 @@ def register(mcp: "FastMCP", deps: Deps) -> None:
         src = state.resolve(image_path)
         if not src.exists():
             return [_text(f"error: source image not found: {src}")]
-        img_b64 = base64.b64encode(src.read_bytes()).decode()
-        png = await client.edit_image(
-            image_b64=img_b64, prompt=prompt, model=model, size=size, strength=strength, seed=seed
+        path = await client.edit_image(
+            image_path=src, prompt=prompt, model=model, size=size, strength=strength,
+            seed=seed, path=_out(config, "images", ".png"),
         )
-        path = _save(config, "images", png, ".png")
         summary = f"Edited image ({model}, strength={strength}) -> {path}\nfrom: {src}\nprompt: {prompt}"
-        return [_text(summary), mcp_types.ImageContent(type="image", data=base64.b64encode(png).decode(), mimeType="image/png")]
+        return [_text(summary)]
 
     # ── audio ──────────────────────────────────────────────────────────────
 
@@ -139,15 +125,12 @@ def register(mcp: "FastMCP", deps: Deps) -> None:
             speed: Optional speaking-rate hint (e.g. "0.5" slow .. "2.0" fast).
         """
         model = model or config.tts_model
-        wav = await client.generate_speech(text=text, model=model, voice=voice, speed=float(speed) if speed else None)
-        path = _save(config, "audio", wav, ".wav")
+        path = await client.generate_speech(
+            text=text, model=model, path=_out(config, "audio", ".wav"),
+            voice=voice, speed=float(speed) if speed else None,
+        )
         summary = f"Spoke {len(text)} chars ({model}) -> {path}"
-        blocks: list[Any] = [_text(summary)]
-        if AudioContent is not None:
-            blocks.append(AudioContent(type="audio", data=base64.b64encode(wav).decode(), mimeType="audio/wav"))
-        else:  # pragma: no cover - older SDK without AudioContent
-            blocks[0] = _text(summary + "\n(inline audio unavailable on this SDK version)")
-        return blocks
+        return [_text(summary)]
 
     @mcp.tool()
     async def generate_music(
@@ -173,18 +156,13 @@ def register(mcp: "FastMCP", deps: Deps) -> None:
             vocal_language: Optional language for sung lyrics.
         """
         model = model or config.music_model
-        wav = await client.generate_music(
-            prompt=prompt, model=model, lyrics=lyrics, duration_seconds=duration_seconds,
+        path = await client.generate_music(
+            prompt=prompt, model=model, path=_out(config, "audio", ".wav"),
+            lyrics=lyrics, duration_seconds=duration_seconds,
             bpm=bpm, keyscale=keyscale, time_signature=time_signature, vocal_language=vocal_language,
         )
-        path = _save(config, "audio", wav, ".wav")
         summary = f"Generated music ({model}) -> {path}\nprompt: {prompt}"
-        blocks: list[Any] = [_text(summary)]
-        if AudioContent is not None:
-            blocks.append(AudioContent(type="audio", data=base64.b64encode(wav).decode(), mimeType="audio/wav"))
-        else:  # pragma: no cover
-            blocks[0] = _text(summary + "\n(inline audio unavailable on this SDK version)")
-        return blocks
+        return [_text(summary)]
 
     # ── video ──────────────────────────────────────────────────────────────
 
@@ -207,24 +185,11 @@ def register(mcp: "FastMCP", deps: Deps) -> None:
             seconds: Optional clip length in seconds (keep short; it is slow).
         """
         model = model or config.video_model
-        result = await client.generate_video(prompt=prompt, model=model, size=size, seconds=seconds)
-        out_path = Path(config.output_dir) / "video" / f"{_stamp()}.mp4"
-        try:
-            import asyncio
-
-            await asyncio.to_thread(
-                video_mod.mux_video_mp4,
-                result.rgb_bytes, result.width, result.height, result.fps,
-                out_path, result.audio_pcm_s16le, result.audio_sample_rate, result.audio_channels,
-            )
-        except Exception as exc:  # muxing failed; still report the failure clearly
-            return [_text(f"error: video generated but ffmpeg mux failed: {exc}")]
-        summary = (
-            f"Generated video ({model}) -> {out_path}\n"
-            f"{result.width}x{result.height} @ {result.fps}fps, {result.frames} frames"
-            + (", with audio" if result.audio_pcm_s16le else ", silent")
-            + f"\nprompt: {prompt}"
+        out_path = _out(config, "video", ".mp4")
+        path = await client.generate_video(
+            prompt=prompt, model=model, size=size, seconds=seconds, path=out_path,
         )
+        summary = f"Generated video ({model}) -> {path}\nprompt: {prompt}"
         return [_text(summary)]
 
     # ── 3d ─────────────────────────────────────────────────────────────────
@@ -233,15 +198,33 @@ def register(mcp: "FastMCP", deps: Deps) -> None:
     async def generate_3d(
         prompt: str,
         model: str | None = None,
+        image_path: str | None = None,
     ) -> list[Any]:
-        """Generate a 3D mesh (GLB) from a text prompt.
+        """Generate a 3D mesh (GLB) from an image of the subject.
 
         Args:
-            prompt: What the object should be.
+            prompt: Text description of the object (used as the image
+                description; the default trellis mesh model is
+                image-conditioned and needs a real source image).
             model: 3D model id. Defaults to the configured mesh model.
+            image_path: Path to a source image of the object to convert
+                into a 3D mesh. Required for the default trellis mesh
+                model, which is image-to-3D only; the file is base64'd and
+                sent as the required ``image`` field.
         """
         model = model or config.mesh_model
-        glb = await client.generate_mesh(prompt=prompt, model=model)
-        path = _save(config, "mesh", glb, ".glb")
-        summary = f"Generated 3D mesh ({model}) -> {path} ({len(glb)} bytes)\nprompt: {prompt}"
+        if not image_path:
+            return [_text(
+                "error: generate_3d needs an 'image_path' (path to a PNG/JPEG of the "
+                "object); the default trellis mesh model is image-to-3D only and "
+                "rejects text-only requests."
+            )]
+        src = Path(image_path).expanduser()
+        if not src.is_file():
+            return [_text(f"error: source image not found: {src}")]
+        path = await client.generate_mesh(
+            prompt=prompt, model=model, path=_out(config, "mesh", ".glb"),
+            image=base64.b64encode(src.read_bytes()).decode(),
+        )
+        summary = f"Generated 3D mesh ({model}) -> {path}\nfrom: {src}\nprompt: {prompt}"
         return [_text(summary)]

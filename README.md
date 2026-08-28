@@ -109,11 +109,11 @@ a source checkout) and speaks MCP over stdio.
 ### Generation (proxied to the remote mlx-serve instance)
 | Tool | What it does |
 | --- | --- |
-| `generate_image` | Text → image (returns the image inline + saves to disk) |
-| `edit_image` | Image + prompt → edited image (image-to-image) |
-| `generate_speech` | Text → spoken audio (TTS) |
-| `generate_music` | Style description (+ optional lyrics) → music |
-| `generate_video` | Prompt → short video clip (muxed to MP4 via ffmpeg) |
+| `generate_image` | Text → image (saved to disk; returns the saved path) |
+| `edit_image` | Image + prompt → edited image (image-to-image, saved to disk) |
+| `generate_speech` | Text → spoken audio (TTS, saved as WAV) |
+| `generate_music` | Style description (+ optional lyrics) → music (saved as WAV) |
+| `generate_video` | Prompt → short video clip (muxed to MP4 via ffmpeg, saved to disk) |
 | `generate_3d` | Prompt → 3D mesh (GLB) |
 
 ### Local (run on the machine hosting the server)
