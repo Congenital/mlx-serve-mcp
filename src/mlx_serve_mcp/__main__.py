@@ -17,13 +17,11 @@ def main(argv: list[str] | None = None) -> int:
 
     app = create_server(config)
 
-    # stdio transport: logs must never touch stdout (it is the protocol pipe).
-    print(
-        f"mlx-serve-mcp: bridging MCP clients to {config.base_url} "
-        f"(output dir: {config.output_dir})",
-        file=sys.stderr,
-    )
-    app.run()
+    # stdio transport is the default; sse / streamable-http use config.host/port.
+    try:
+        app.run(transport=config.transport)
+    except KeyboardInterrupt:  # graceful shutdown on Ctrl-C
+        pass
     return 0
 
 

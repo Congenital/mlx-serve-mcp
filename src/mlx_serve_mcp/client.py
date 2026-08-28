@@ -3,51 +3,46 @@
 Mirrors the wire contract implemented by mlx-serve's ``src/server.zig`` and
 ``src/gen.zig``:
 
-* ``GET  /health``                    -> ``{"status":"ok"}``
-* ``GET  /v1/models``                 -> OpenAI list, entries carry capability flags
-* ``POST /v1/load-model``             -> ``{"model":"<id>","default":bool?}``
-* ``POST /v1/unload-model``           -> ``{"model":"<id>"}``
-* ``POST /v1/images/generations``     -> ``{"created":0,"data":[{"b64_json":...}]}`` (PNG)
+* ``GET  /health``                     -> ``{"status":"ok"}``
+* ``GET  /v1/models``                  -> OpenAI list, entries carry capability flags
+* ``POST /v1/load-model``              -> ``{"model":"<id>","default":bool?}``
+* ``POST /v1/unload-model``            -> ``{"model":"<id>"}``
+* ``POST /v1/images/generations``      -> ``{"created":0,"data":[{"b64_json":...}]}`` (PNG)
+* ``POST /v1/images/edits``           -> ``{"created":0,"data":[{"b64_json":...}]}`` (PNG)
 * ``POST /v1/audio/speech``           -> raw ``audio/wav`` bytes
 * ``POST /v1/audio/music-generations``-> raw ``audio/wav`` bytes
-* ``POST /v1/video/generations``      -> ``{"frames","height","width","fps",
-    "format":"rgb8","data":"<b64>","audio_sample_rate"?,"audio_channels"?,
-    "audio_format":"pcm_s16le","audio_data"?}``
+* ``POST /v1/video/generations``      -> ``{"frames","height","width","fps","format":"rgb8",
+                                          "data":"<b64>","audio_sample_rate"?,"audio_channels"?,
+                                          "audio_format":"pcm_s16le","audio_data"?}``
 * ``POST /v1/3d/generations``         -> ``{"created":0,"format":"glb","data":"<b64>"}``
 
-Errors arrive as JSON bodies in two shapes (both produced by the server):
-``{"error":{"message":"..."}}`` and the OpenAI-style
-``{"error":{"type":...,"message":...}}``. Both are unwrapped into
+Errors come in two shapes: ``{"error":{"message":...}}`` and
+``{"error":{"type":...,"message":...}}``; both are surfaced as
 :class:`MlxServeError`.
 """
 
 from __future__ import annotations
 
 import base64
-import json
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
-USER_AGENT = "mlx-serve-mcp"
+USER_AGENT = "mlx-serve-mcp/0.2"
 
 
-class MlxServeError(Exception):
-    """A request reached the server but was rejected (or the response broke)."""
+class MlxServeError(RuntimeError):
+    """A non-2xx (or malformed) response from the mlx-serve instance."""
 
     def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
 
 
-class MlxServeConnectionError(MlxServeError):
-    """The server could not be reached at all (DNS, refused, timeout)."""
-
-
 @dataclass(frozen=True)
 class VideoResult:
-    """Decoded `/v1/video/generations` payload: raw RGB8 frames + optional PCM."""
+    """Decoded ``/v1/video/generations`` payload: raw RGB8 frames + optional PCM."""
 
     frames: int
     width: int
@@ -65,200 +60,241 @@ def extract_error_message(response: httpx.Response) -> str:
         data = response.json()
     except ValueError:
         text = (response.text or "").strip()
-        return text[:500] if text else response.reason_phrase or "request failed"
+        return text[:500] if text else (response.reason_phrase or "request failed")
     err = data.get("error") if isinstance(data, dict) else None
     if isinstance(err, dict):
-        return str(err.get("message") or json.dumps(err, ensure_ascii=False))
-    if isinstance(err, str) and err:
+        msg = err.get("message") or err.get("type") or "error"
+        typ = err.get("type")
+        return f"{typ}: {msg}" if typ and err.get("message") else str(msg)
+    if isinstance(err, str):
         return err
-    if isinstance(data, dict) and "message" in data:
-        return str(data["message"])
-    return json.dumps(data, ensure_ascii=False)[:500]
+    return response.text[:500] or response.reason_phrase or "request failed"
 
 
-def decode_b64(data: str | bytes) -> bytes:
-    if isinstance(data, str):
-        data = data.encode("ascii")
-    try:
-        return base64.b64decode(data, validate=False)
-    except Exception as exc:  # binascii.Error subclasses ValueError
-        raise MlxServeError(f"server returned invalid base64 payload: {exc}") from exc
+def _b64_to_bytes(value: str | bytes) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    return base64.b64decode(value)
+
 
 class MlxServeClient:
-    """Thin async wrapper over one mlx-serve instance."""
+    """A thin async client for one remote mlx-serve instance.
+
+    One instance is kept for the life of the MCP server process (the stdio
+    transport is one session per process). Generation requests may block for
+    many minutes, so the read timeout is long while the connect timeout stays
+    short to fail fast on an unreachable host.
+    """
 
     def __init__(
         self,
         base_url: str,
         api_key: str | None = None,
         timeout_seconds: float = 1800.0,
-        transport: httpx.AsyncBaseTransport | None = None,
+        client: httpx.AsyncClient | None = None,
     ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
         headers = {
             "User-Agent": USER_AGENT,
-            "Accept": "application/json, audio/wav, octet-stream",
+            "Accept": "application/json, audio/wav, application/octet-stream",
         }
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        # Generation requests block for minutes; only the connect phase is short.
         timeout = httpx.Timeout(timeout_seconds, connect=10.0)
-        self._client = httpx.AsyncClient(
-            base_url=base_url.rstrip("/"),
-            headers=headers,
-            timeout=timeout,
-            transport=transport,
-            follow_redirects=True,
-        )
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
+        self._client = client or httpx.AsyncClient(base_url=self.base_url, headers=headers, timeout=timeout)
+        self._owns_client = client is None
 
     async def __aenter__(self) -> "MlxServeClient":
         return self
 
-    async def __aexit__(self, *exc_info: object) -> None:
+    async def __aexit__(self, *exc: object) -> None:
         await self.aclose()
 
-    # ── low-level helpers ────────────────────────────────────────────────
+    async def aclose(self) -> None:
+        if self._owns_client:
+            await self._client.aclose()
 
-    async def _send(
-        self, method: str, path: str, json_body: dict[str, Any] | None
-    ) -> httpx.Response:
+    # ── low-level helpers ──────────────────────────────────────────────────
+
+    async def _request(self, method: str, path: str, *, json: Any | None = None) -> httpx.Response:
         try:
-            return await self._client.request(method, path, json=json_body)
+            response = await self._client.request(method, path, json=json)
         except httpx.HTTPError as exc:
-            raise MlxServeConnectionError(
-                f"cannot reach mlx-serve at {self._client.base_url}{path}: "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
-
-    async def _request_json(
-        self, method: str, path: str, json_body: dict[str, Any] | None = None
-    ) -> Any:
-        response = await self._send(method, path, json_body)
+            raise MlxServeError(f"could not reach {self.base_url}{path}: {exc}") from exc
         if response.status_code >= 400:
-            raise MlxServeError(
-                extract_error_message(response), status_code=response.status_code
-            )
+            raise MlxServeError(extract_error_message(response), status_code=response.status_code)
+        return response
+
+    async def _request_json(self, method: str, path: str, *, json: Any | None = None) -> dict[str, Any]:
+        response = await self._request(method, path, json=json)
         try:
             return response.json()
         except ValueError as exc:
-            raise MlxServeError(
-                f"expected JSON from {method} {path}, got "
-                f"{response.headers.get('content-type', 'unknown content type')}",
-                status_code=response.status_code,
-            ) from exc
+            raise MlxServeError(f"malformed JSON from {path}: {response.text[:200]!r}") from exc
 
-    # ── management endpoints ─────────────────────────────────────────────
+    async def _request_bytes(self, method: str, path: str, *, json: Any | None = None) -> bytes:
+        response = await self._request(method, path, json=json)
+        return response.content
+
+    # ── management endpoints ───────────────────────────────────────────────
 
     async def health(self) -> dict[str, Any]:
-        """GET /health — cheap liveness probe (open even when key auth is on)."""
+        """``GET /health`` — cheap liveness probe (open even when key auth is on)."""
         return await self._request_json("GET", "/health")
 
     async def list_models(self) -> list[dict[str, Any]]:
-        """GET /v1/models — every registry entry with its capability flags."""
+        """``GET /v1/models`` — the OpenAI-style model list with capability flags."""
         data = await self._request_json("GET", "/v1/models")
-        models = data.get("data") if isinstance(data, dict) else None
-        if not isinstance(models, list):
-            raise MlxServeError("unexpected /v1/models response shape")
-        return models
+        return data.get("data", []) if isinstance(data, dict) else []
 
-    async def load_model(self, model: str, *, make_default: bool = False) -> dict[str, Any]:
-        """POST /v1/load-model — cold-load a model; strict 404 on unknown ids."""
-        body: dict[str, Any] = {"model": model}
-        if make_default:
-            body["default"] = True
-        return await self._request_json("POST", "/v1/load-model", body)
+    async def load_model(self, model: str, default: bool = False) -> dict[str, Any]:
+        """``POST /v1/load-model`` — load (and optionally set default) a model."""
+        return await self._request_json("POST", "/v1/load-model", json={"model": model, "default": default})
 
     async def unload_model(self, model: str) -> dict[str, Any]:
-        """POST /v1/unload-model — free resident GPU state (stub stays registered)."""
-        return await self._request_json("POST", "/v1/unload-model", {"model": model})
+        """``POST /v1/unload-model`` — free a model's memory."""
+        return await self._request_json("POST", "/v1/unload-model", json={"model": model})
 
-    # ── media generation ─────────────────────────────────────────────────
+    # ── image ──────────────────────────────────────────────────────────────
 
-    async def generate_image(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
-        """POST /v1/images/generations — returns the parsed ``data`` array.
+    async def generate_image(
+        self,
+        prompt: str,
+        model: str,
+        size: str = "1024x1024",
+        n: int = 1,
+        seed: int | None = None,
+    ) -> list[bytes]:
+        """``POST /v1/images/generations`` -> PNG bytes (one per requested image)."""
+        payload: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+            "size": size,
+            "n": n,
+            "response_format": "b64_json",
+        }
+        if seed is not None:
+            payload["seed"] = seed
+        data = await self._request_json("POST", "/v1/images/generations", json=payload)
+        out: list[bytes] = []
+        for entry in data.get("data", []):
+            b64 = entry.get("b64_json")
+            if b64:
+                out.append(_b64_to_bytes(b64))
+        if not out:
+            raise MlxServeError(f"image generation returned no data: {str(data)[:200]}")
+        return out
 
-        Each entry looks like ``{"b64_json": "<png bytes base64>"}``.
-        """
-        data = await self._request_json("POST", "/v1/images/generations", payload)
-        items = data.get("data") if isinstance(data, dict) else None
-        if not isinstance(items, list):
-            raise MlxServeError("unexpected /v1/images/generations response shape")
-        return items
+    async def edit_image(
+        self,
+        image_b64: str,
+        prompt: str,
+        model: str,
+        size: str = "1024x1024",
+        strength: float = 0.6,
+        seed: int | None = None,
+    ) -> bytes:
+        """``POST /v1/images/edits`` -> edited PNG bytes."""
+        payload: dict[str, Any] = {
+            "model": model,
+            "image": image_b64,
+            "prompt": prompt,
+            "size": size,
+            "strength": strength,
+            "response_format": "b64_json",
+        }
+        if seed is not None:
+            payload["seed"] = seed
+        data = await self._request_json("POST", "/v1/images/edits", json=payload)
+        for entry in data.get("data", []):
+            b64 = entry.get("b64_json")
+            if b64:
+                return _b64_to_bytes(b64)
+        raise MlxServeError(f"image edit returned no data: {str(data)[:200]}")
 
-    async def generate_speech(self, payload: dict[str, Any]) -> bytes:
-        """POST /v1/audio/speech — non-streaming answer is a WAV byte string."""
-        return await self._expect_wav("/v1/audio/speech", payload)
+    # ── audio ──────────────────────────────────────────────────────────────
 
-    async def generate_music(self, payload: dict[str, Any]) -> bytes:
-        """POST /v1/audio/music-generations — same binary contract as speech."""
-        return await self._expect_wav("/v1/audio/music-generations", payload)
+    async def generate_speech(
+        self,
+        text: str,
+        model: str,
+        voice: str | None = None,
+        speed: float | None = None,
+    ) -> bytes:
+        """``POST /v1/audio/speech`` -> raw WAV bytes."""
+        payload: dict[str, Any] = {"model": model, "input": text, "response_format": "wav"}
+        if voice is not None:
+            payload["voice"] = voice
+        if speed is not None:
+            payload["speed"] = speed
+        return await self._request_bytes("POST", "/v1/audio/speech", json=payload)
 
-    async def _expect_wav(self, path: str, payload: dict[str, Any]) -> bytes:
-        response = await self._send("POST", path, payload)
-        if response.status_code >= 400:
-            raise MlxServeError(
-                extract_error_message(response), status_code=response.status_code
-            )
-        content_type = response.headers.get("content-type", "")
-        if content_type.startswith("audio/"):
-            return response.content
-        # Defensive: a 200 that is not audio means the server changed contract.
-        raise MlxServeError(
-            f"expected audio/wav from {path}, got {content_type or 'no content-type'}",
-            status_code=response.status_code,
-        )
+    async def generate_music(
+        self,
+        prompt: str,
+        model: str,
+        lyrics: str | None = None,
+        duration_seconds: int | None = None,
+        bpm: int | None = None,
+        keyscale: str | None = None,
+        time_signature: str | None = None,
+        vocal_language: str | None = None,
+    ) -> bytes:
+        """``POST /v1/audio/music-generations`` -> raw WAV bytes."""
+        payload: dict[str, Any] = {"model": model, "prompt": prompt}
+        for key, value in (
+            ("lyrics", lyrics),
+            ("duration_seconds", duration_seconds),
+            ("bpm", bpm),
+            ("keyscale", keyscale),
+            ("time_signature", time_signature),
+            ("vocal_language", vocal_language),
+        ):
+            if value is not None:
+                payload[key] = value
+        return await self._request_bytes("POST", "/v1/audio/music-generations", json=payload)
 
-    async def generate_video(self, payload: dict[str, Any]) -> VideoResult:
-        """POST /v1/video/generations — decode RGB8 frames (+ optional PCM track)."""
-        data = await self._request_json("POST", "/v1/video/generations", payload)
-        if not isinstance(data, dict):
-            raise MlxServeError("video response was not a JSON object")
-        if data.get("format") != "rgb8":
-            raise MlxServeError(
-                f"video response format is {data.get('format')!r}, expected 'rgb8'"
-            )
-        try:
-            frames = int(data["frames"])
-            width = int(data["width"])
-            height = int(data["height"])
-            fps = int(data["fps"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise MlxServeError(f"video response missing geometry fields: {exc}") from exc
-        rgb = decode_b64(data.get("data", ""))
-        expected = frames * height * width * 3
-        if len(rgb) != expected:
-            raise MlxServeError(
-                f"video payload size mismatch: got {len(rgb)} RGB bytes, "
-                f"expected {expected} for {frames}f {width}x{height}"
-            )
-        audio_pcm: bytes | None = None
-        sample_rate = channels = None
-        if data.get("audio_data"):
-            audio_pcm = decode_b64(data["audio_data"])
-            sample_rate = int(data.get("audio_sample_rate") or 48000)
-            channels = int(data.get("audio_channels") or 2)
+    # ── video ──────────────────────────────────────────────────────────────
+
+    async def generate_video(
+        self,
+        prompt: str,
+        model: str,
+        size: str | None = None,
+        seconds: int | None = None,
+        fps: int | None = None,
+    ) -> VideoResult:
+        """``POST /v1/video/generations`` -> decoded :class:`VideoResult`."""
+        payload: dict[str, Any] = {"model": model, "prompt": prompt}
+        for key, value in (("size", size), ("seconds", seconds), ("fps", fps)):
+            if value is not None:
+                payload[key] = value
+        data = await self._request_json("POST", "/v1/video/generations", json=payload)
         return VideoResult(
-            frames=frames,
-            width=width,
-            height=height,
-            fps=fps,
-            rgb_bytes=rgb,
-            audio_pcm_s16le=audio_pcm,
-            audio_sample_rate=sample_rate,
-            audio_channels=channels,
+            frames=int(data.get("frames", 0)),
+            width=int(data.get("width", 0)),
+            height=int(data.get("height", 0)),
+            fps=int(data.get("fps", 0) or 0),
+            rgb_bytes=_b64_to_bytes(data.get("data", "")),
+            audio_pcm_s16le=_b64_to_bytes(data["audio_data"]) if data.get("audio_data") else None,
+            audio_sample_rate=data.get("audio_sample_rate"),
+            audio_channels=data.get("audio_channels"),
         )
 
-    async def generate_mesh(self, payload: dict[str, Any]) -> bytes:
-        """POST /v1/3d/generations — returns decoded GLB bytes."""
-        data = await self._request_json("POST", "/v1/3d/generations", payload)
-        if not isinstance(data, dict):
-            raise MlxServeError("mesh response was not a JSON object")
-        fmt = data.get("format", "glb")
-        if fmt != "glb":
-            raise MlxServeError(f"mesh response format is {fmt!r}, expected 'glb'")
-        glb = decode_b64(data.get("data", ""))
-        if not glb:
-            raise MlxServeError("mesh response carried an empty GLB payload")
-        return glb
+    # ── 3d ─────────────────────────────────────────────────────────────────
+
+    async def generate_mesh(
+        self,
+        prompt: str,
+        model: str,
+        **extra: Any,
+    ) -> bytes:
+        """``POST /v1/3d/generations`` -> raw GLB bytes."""
+        payload: dict[str, Any] = {"model": model, "prompt": prompt, **extra}
+        data = await self._request_json("POST", "/v1/3d/generations", json=payload)
+        b64 = data.get("data")
+        if not b64:
+            raise MlxServeError(f"3d generation returned no data: {str(data)[:200]}")
+        return _b64_to_bytes(b64)

@@ -1,15 +1,26 @@
 [project]
 name = "mlx-serve-mcp"
-version = "0.1.0"
-description = "MCP server exposing a remote mlx-serve instance (image / video / speech / music / 3D generation) as MCP tools"
+version = "0.2.0"
+description = "MCP server bridging MCP clients to a remote mlx-serve instance and exposing the full agent toolset (generation, files, shell, web, memory, tasks)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "andy" }]
-keywords = ["mcp", "mlx-serve", "llm", "image-generation", "tts", "music", "video", "3d"]
+keywords = ["mcp", "mlx-serve", "llm", "image-generation", "tts", "music", "video", "3d", "agent"]
 dependencies = [
+    # Pin to the v1 line: `mcp.server.fastmcp` (FastMCP) was removed in the
+    # v2 SDK. Upgrading to the standalone `fastmcp` package is a one-line import
+    # change (see README) when you outgrow this pin.
+    "mcp>=1.9,<2.0",
     "httpx>=0.27",
     "imageio-ffmpeg>=0.5",
+    "selectolax>=0.3.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
 ]
 
 [project.scripts]
@@ -22,8 +33,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mlx_serve_mcp"]
 
-[dependency-groups]
-dev = ["pytest>=8.0"]
-
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 testpaths = ["tests"]

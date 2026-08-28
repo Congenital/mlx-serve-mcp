@@ -1,57 +1,24 @@
 {
   "identifier": "congenital-mlx-serve-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "mlx-serve MCP",
-  "description": "Bring Apple Silicon AI to your MCP clients — a single stdio bridge to a remote mlx-serve inference server for images, speech, music, video and 3D, with ready-made one-click prompts.",
+  "description": "Bring Apple Silicon AI to your MCP clients — a stdio bridge to a remote mlx-serve inference server for images, speech, music, video and 3D, plus a full local toolset (files, shell, web, memory, scheduled tasks) and ready-made one-click prompts.",
   "author": "Congenital",
   "homepage": "https://github.com/Congenital/mlx-serve-mcp",
   "license": "MIT",
   "metadata": {
     "lobeChat": {
       "changelog": {
-        "en-US": {
-          "1.0.0": [
-            "Added: full mlx-serve bridge — images, speech, music, video and 3D generation as MCP tools",
-            "Added: 6 one-click prompts (poster, portrait, lo-fi track, speech, 3D, video)",
-            "Added: configurable MLX_SERVE_URL / MLX_SERVE_API_KEY / output directory"
-          ]
-        },
-        "zh-CN": {
-          "1.0.0": [
-            "新增：完整的 mlx-serve 桥接 —— 图像、语音、音乐、视频与 3D 生成 MCP 工具",
-            "新增：6 个一键提示词（海报、人像、Lo-Fi 音乐、语音、3D、视频）",
-            "新增：可配置的 MLX_SERVE_URL / MLX_SERVE_API_KEY / 输出目录"
-          ]
-        }
+        "1.1.0": "Reimplemented on the official MCP SDK (FastMCP). Added the full local agent toolset: files, shell, background processes, web search/browse, persistent memory, and scheduled tasks. Generation tools now return media inline.",
+        "1.0.0": "Initial release: stdio bridge to a remote mlx-serve instance for images, speech, music, video and 3D, with one-click prompts."
       }
     }
   },
   "deploymentOptions": [
     {
-      "name": "Local",
-      "type": "local",
-      "description": "Run the mlx-serve-mcp stdio bridge on your machine, pointed at any mlx-serve instance (local or remote) via MLX_SERVE_URL.",
-      "requires": [
-        {
-          "type": "apiKey",
-          "key": "MLX_SERVE_URL",
-          "description": "Base URL of the mlx-serve instance, e.g. http://192.168.1.10:8080 (required)",
-          "required": true,
-          "defaultValue": "http://192.168.1.10:8080"
-        },
-        {
-          "type": "apiKey",
-          "key": "MLX_SERVE_API_KEY",
-          "description": "Bearer token for the mlx-serve instance (only if it is behind auth; optional)",
-          "required": false
-        },
-        {
-          "type": "env",
-          "key": "MLX_SERVE_OUTPUT_DIR",
-          "description": "Where generated media is saved (default: ~/Downloads/mlx-serve-mcp)",
-          "required": false
-        }
-      ],
+      "id": "stdio",
+      "name": "stdio (spawn)",
+      "description": "The MCP host spawns the server; it connects out to your mlx-serve instance.",
       "configuration": {
         "server": {
           "type": "stdio",
@@ -71,430 +38,237 @@
     "resources": []
   },
   "tools": [
-      {
-        "name": "health_check",
-        "description": "Check connectivity to the remote mlx-serve instance (GET /health). Use this first to verify the ip:port is reachable.",
-        "parameters": []
-      },
-      {
-        "name": "list_models",
-        "description": "List models available on the remote mlx-serve server with their capability flags (chat/vision, image, speech, music, video, 3D).",
-        "parameters": []
-      },
-      {
-        "name": "load_model",
-        "description": "Explicitly cold-load a model into GPU memory (optionally as the server-wide default).",
-        "parameters": [
-          {
-            "name": "model",
-            "type": "string",
-            "description": "Model id from list_models, or an absolute path to a model directory on the server",
-            "required": true
-          },
-          {
-            "name": "make_default",
-            "type": "boolean",
-            "description": "Also promote it to the server-wide default model",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "unload_model",
-        "description": "Free a model's GPU memory on the remote server (it stays registered and can be reloaded).",
-        "parameters": [
-          {
-            "name": "model",
-            "type": "string",
-            "description": "Model id to evict",
-            "required": true
-          }
-        ]
-      },
-      {
-        "name": "generate_image",
-        "description": "Generate an image from a text prompt; saved as a local PNG with its path returned. Defaults to ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit (best at text in images); use Runpod/FLUX.2-klein-4B for faces.",
-        "parameters": [
-          {
-            "name": "prompt",
-            "type": "string",
-            "description": "Text description of the image",
-            "required": true
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "description": "Model id (from list_models); defaults to MLX_SERVE_IMAGE_MODEL",
-            "required": false
-          },
-          {
-            "name": "size",
-            "type": "string",
-            "description": "Output dimensions, e.g. 1024x1024",
-            "required": false
-          },
-          {
-            "name": "seed",
-            "type": "number",
-            "description": "Optional random seed for reproducibility",
-            "required": false
-          },
-          {
-            "name": "steps",
-            "type": "number",
-            "description": "Sampling steps (backend-specific)",
-            "required": false
-          },
-          {
-            "name": "cfg_scale",
-            "type": "number",
-            "description": "Classifier-free guidance scale (SDXL/Flux style)",
-            "required": false
-          },
-          {
-            "name": "guidance_scale",
-            "type": "number",
-            "description": "Guidance scale (MAGE-Flow style)",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "edit_image",
-        "description": "Edit an existing image with a text prompt; saved as a local PNG. Defaults to Runpod/FLUX.2-klein-4B-mflux-4bit (best for faces).",
-        "parameters": [
-          {
-            "name": "image_path",
-            "type": "string",
-            "description": "Absolute or ~-relative path to the source image (PNG/JPEG)",
-            "required": true
-          },
-          {
-            "name": "prompt",
-            "type": "string",
-            "description": "Description of the desired edit",
-            "required": true
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "description": "Model id; defaults to MLX_SERVE_IMAGE_EDIT_MODEL",
-            "required": false
-          },
-          {
-            "name": "size",
-            "type": "string",
-            "description": "Output dimensions",
-            "required": false
-          },
-          {
-            "name": "strength",
-            "type": "number",
-            "description": "Denoising strength 0..1 (how much to change the image)",
-            "required": false
-          },
-          {
-            "name": "seed",
-            "type": "number",
-            "description": "Optional random seed",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "text_to_speech",
-        "description": "Synthesize speech from text; returns a local WAV file path. Defaults to Qwen3-0.6B-TTS-12Hz-MLX-2bit.",
-        "parameters": [
-          {
-            "name": "text",
-            "type": "string",
-            "description": "The text to speak",
-            "required": true
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "description": "TTS model id; defaults to MLX_SERVE_TTS_MODEL",
-            "required": false
-          },
-          {
-            "name": "voice",
-            "type": "string",
-            "description": "Voice name or id (backend-specific)",
-            "required": false
-          },
-          {
-            "name": "speed",
-            "type": "number",
-            "description": "Playback speed multiplier 0.25..4.0",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "generate_music",
-        "description": "Generate a music track from a style prompt; returns a local WAV path. Supports text2music, cover and complete tasks, plus bpm/keyscale/vocal_language.",
-        "parameters": [
-          {
-            "name": "prompt_style",
-            "type": "string",
-            "description": "Style description, e.g. 'lo-fi hip hop, mellow piano'",
-            "required": true
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "description": "Music model id; defaults to MLX_SERVE_MUSIC_MODEL",
-            "required": false
-          },
-          {
-            "name": "lyrics",
-            "type": "string",
-            "description": "Optional lyrics for vocal tracks",
-            "required": false
-          },
-          {
-            "name": "instrumental",
-            "type": "boolean",
-            "description": "True for no vocals",
-            "required": false
-          },
-          {
-            "name": "duration_seconds",
-            "type": "number",
-            "description": "Target length 10..600 (default 60)",
-            "required": false
-          },
-          {
-            "name": "bpm",
-            "type": "number",
-            "description": "Tempo, e.g. 120",
-            "required": false
-          },
-          {
-            "name": "keyscale",
-            "type": "string",
-            "description": "Musical key, e.g. 'C major'",
-            "required": false
-          },
-          {
-            "name": "timesignature",
-            "type": "string",
-            "description": "Time signature, e.g. '4/4'",
-            "required": false
-          },
-          {
-            "name": "vocal_language",
-            "type": "string",
-            "description": "Vocal language code, e.g. 'en', 'zh'",
-            "required": false
-          },
-          {
-            "name": "task",
-            "type": "string",
-            "description": "'text2music' (default) | 'cover' | 'complete'",
-            "required": false
-          },
-          {
-            "name": "src_audio_path",
-            "type": "string",
-            "description": "Local WAV (10-600 s) source for cover/complete tasks",
-            "required": false
-          },
-          {
-            "name": "cover_strength",
-            "type": "number",
-            "description": "0..1 how strongly to follow the cover source",
-            "required": false
-          },
-          {
-            "name": "seed",
-            "type": "number",
-            "description": "Optional seed for reproducibility",
-            "required": false
-          },
-          {
-            "name": "steps",
-            "type": "number",
-            "description": "Optional sampling steps (music3 backend)",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "generate_video",
-        "description": "Generate a short video from a text prompt; returns a local MP4 path (H.264, optional AAC soundtrack). Supports first/last frame conditioning.",
-        "parameters": [
-          {
-            "name": "prompt",
-            "type": "string",
-            "description": "Scene description for the video",
-            "required": true
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "description": "Video model id; defaults to MLX_SERVE_VIDEO_MODEL",
-            "required": false
-          },
-          {
-            "name": "num_frames",
-            "type": "number",
-            "description": "Frame count (LTX: 8N+1 ladder; H3: 17k+5)",
-            "required": false
-          },
-          {
-            "name": "width",
-            "type": "number",
-            "description": "Pixel width (LTX/H3 default 256; must be divisible by 64)",
-            "required": false
-          },
-          {
-            "name": "height",
-            "type": "number",
-            "description": "Pixel height",
-            "required": false
-          },
-          {
-            "name": "steps",
-            "type": "number",
-            "description": "Sampling steps (backend-specific)",
-            "required": false
-          },
-          {
-            "name": "turbo",
-            "type": "boolean",
-            "description": "Use the distilled 4-step turbo path where available",
-            "required": false
-          },
-          {
-            "name": "seed",
-            "type": "number",
-            "description": "Optional seed",
-            "required": false
-          },
-          {
-            "name": "cfg_scale",
-            "type": "number",
-            "description": "Guidance scale",
-            "required": false
-          },
-          {
-            "name": "first_frame_image_path",
-            "type": "string",
-            "description": "Optional local image to condition the first frame",
-            "required": false
-          },
-          {
-            "name": "last_frame_image_path",
-            "type": "string",
-            "description": "Optional local image to condition the final frame",
-            "required": false
-          },
-          {
-            "name": "audio_path",
-            "type": "string",
-            "description": "Optional local WAV to mix as soundtrack (must match frame duration)",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "generate_3d",
-        "description": "Generate a textured 3D mesh (GLB) from a subject image; the image should be a clean cutout with real alpha transparency.",
-        "parameters": [
-          {
-            "name": "image_path",
-            "type": "string",
-            "description": "Local PNG/JPEG of the subject (alpha cutout works best)",
-            "required": true
-          },
-          {
-            "name": "model",
-            "type": "string",
-            "description": "3D mesh model id; defaults to MLX_SERVE_MESH_MODEL",
-            "required": false
-          },
-          {
-            "name": "steps",
-            "type": "number",
-            "description": "Shape sampling steps (default 30)",
-            "required": false
-          },
-          {
-            "name": "octree_resolution",
-            "type": "number",
-            "description": "Mesh grid resolution 64..512 (default 256)",
-            "required": false
-          },
-          {
-            "name": "guidance_scale",
-            "type": "number",
-            "description": "Shape guidance 0..20 (default 5)",
-            "required": false
-          },
-          {
-            "name": "texture",
-            "type": "boolean",
-            "description": "Request the texture-paint stage for a textured GLB",
-            "required": false
-          },
-          {
-            "name": "texture_steps",
-            "type": "number",
-            "description": "Texture painting steps 1..100 when texture=true",
-            "required": false
-          },
-          {
-            "name": "seed",
-            "type": "number",
-            "description": "Optional seed",
-            "required": false
-          }
-        ]
-      }
-    ],
-    "prompts": [
-      {
-        "name": "create_poster",
-        "description": "Design a text-centric poster or typographic artwork. Uses Mage-Flow-Turbo, the most reliable model for rendering text in images."
-      },
-      {
-        "name": "portrait_photo",
-        "description": "Generate a realistic portrait or photo-real scene. Uses FLUX.2-klein-4B, the best model for faces and photo-real detail."
-      },
-      {
-        "name": "lofi_track",
-        "description": "Generate a lo-fi hip-hop music track with optional vocals. Uses MiniMax-Music3 for the best music quality on mlx-serve."
-      },
-      {
-        "name": "speak_text",
-        "description": "Convert text to natural speech. Uses Qwen3-TTS, the most natural-sounding TTS model on mlx-serve."
-      },
-      {
-        "name": "image_to_3d",
-        "description": "Turn a clean cutout photo into a textured 3D model (GLB) for Blender, three.js or Quick Look."
-      },
-      {
-        "name": "short_video",
-        "description": "Generate a short video clip (9 frames, 256x256) — the fastest video path on mlx-serve, good for previews."
-      }
-    ],
-    "resources": [
-      {
-        "name": "models",
-        "description": "Live model inventory from the remote mlx-serve instance — model ids, capability flags (chat, vision, image, speech, music, video, 3D) and load status.",
-        "uri": "mlx-serve://models"
-      },
-      {
-        "name": "server_status",
-        "description": "Health and status of the remote mlx-serve instance — reachable, version, loaded models, GPU info.",
-        "uri": "mlx-serve://status"
-      },
-      {
-        "name": "model_guidance",
-        "description": "Recommended model choices for each media tool based on real-world testing (which model for text rendering, faces, music, video, 3D).",
-        "uri": "mlx-serve://guidance"
-      }
-    ]
-  }
+    {
+      "name": "generate_image",
+      "description": "Generate an image from a text prompt via the remote mlx-serve instance. Returns the image inline and saves it to disk.",
+      "parameters": [
+        { "name": "prompt", "type": "string", "description": "What the image should depict.", "required": true },
+        { "name": "model", "type": "string", "description": "Model id (defaults to the configured image model).", "required": false },
+        { "name": "size", "type": "string", "description": "Output dimensions, e.g. 1024x1024.", "required": false },
+        { "name": "seed", "type": "number", "description": "Optional random seed.", "required": false }
+      ]
+    },
+    {
+      "name": "edit_image",
+      "description": "Edit an existing image with a text prompt (image-to-image).",
+      "parameters": [
+        { "name": "image_path", "type": "string", "description": "Path to the source image (PNG/JPEG).", "required": true },
+        { "name": "prompt", "type": "string", "description": "Description of the desired edit.", "required": true },
+        { "name": "model", "type": "string", "description": "Model id (defaults to the configured image-edit model).", "required": false },
+        { "name": "size", "type": "string", "description": "Output dimensions.", "required": false },
+        { "name": "strength", "type": "number", "description": "Denoising strength 0..1.", "required": false },
+        { "name": "seed", "type": "number", "description": "Optional random seed.", "required": false }
+      ]
+    },
+    {
+      "name": "generate_speech",
+      "description": "Speak a line of text aloud (text-to-speech). Returns audio inline and saves a WAV.",
+      "parameters": [
+        { "name": "text", "type": "string", "description": "Exactly the words to speak.", "required": true },
+        { "name": "model", "type": "string", "description": "TTS model id.", "required": false },
+        { "name": "voice", "type": "string", "description": "Optional voice name.", "required": false },
+        { "name": "speed", "type": "string", "description": "Optional speaking rate, 0.5 (slow) to 2.0 (fast).", "required": false }
+      ]
+    },
+    {
+      "name": "generate_music",
+      "description": "Compose a piece of music from a style description, with optional lyrics.",
+      "parameters": [
+        { "name": "prompt", "type": "string", "description": "Style: genre, mood, instrumentation, tempo feel.", "required": true },
+        { "name": "model", "type": "string", "description": "Music model id.", "required": false },
+        { "name": "lyrics", "type": "string", "description": "Optional words to sing (omit for an instrumental).", "required": false },
+        { "name": "duration_seconds", "type": "number", "description": "Optional target length in seconds.", "required": false },
+        { "name": "bpm", "type": "number", "description": "Optional tempo in beats per minute.", "required": false },
+        { "name": "keyscale", "type": "string", "description": "Optional key, e.g. A minor.", "required": false },
+        { "name": "time_signature", "type": "string", "description": "Optional meter, e.g. 4/4.", "required": false },
+        { "name": "vocal_language", "type": "string", "description": "Optional language for sung lyrics.", "required": false }
+      ]
+    },
+    {
+      "name": "generate_video",
+      "description": "Generate a short video clip from a prompt; muxed to MP4 via ffmpeg and saved to disk.",
+      "parameters": [
+        { "name": "prompt", "type": "string", "description": "What the clip should show.", "required": true },
+        { "name": "model", "type": "string", "description": "Video model id.", "required": false },
+        { "name": "size", "type": "string", "description": "Optional WIDTHxHEIGHT or a ratio like 16:9.", "required": false },
+        { "name": "seconds", "type": "number", "description": "Optional clip length in seconds (keep short).", "required": false }
+      ]
+    },
+    {
+      "name": "generate_3d",
+      "description": "Generate a 3D mesh (GLB) from a text prompt; saved to disk.",
+      "parameters": [
+        { "name": "prompt", "type": "string", "description": "What the object should be.", "required": true },
+        { "name": "model", "type": "string", "description": "3D model id.", "required": false }
+      ]
+    },
+    {
+      "name": "read_file",
+      "description": "Read a file's contents, optionally a 1-based inclusive line range.",
+      "parameters": [
+        { "name": "path", "type": "string", "description": "File path (relative resolves against the working dir).", "required": true },
+        { "name": "start_line", "type": "number", "description": "First line to read (1-based).", "required": false },
+        { "name": "end_line", "type": "number", "description": "Last line to read (inclusive).", "required": false }
+      ]
+    },
+    {
+      "name": "write_file",
+      "description": "Write content to a file, creating parent directories. Overwrites unless append=true.",
+      "parameters": [
+        { "name": "path", "type": "string", "description": "Destination path.", "required": true },
+        { "name": "content", "type": "string", "description": "The text to write.", "required": true },
+        { "name": "append", "type": "boolean", "description": "Append instead of overwrite.", "required": false }
+      ]
+    },
+    {
+      "name": "edit_file",
+      "description": "Edit a file by line range (start_line/end_line) or by exact text (find).",
+      "parameters": [
+        { "name": "path", "type": "string", "description": "File to edit.", "required": true },
+        { "name": "replace", "type": "string", "description": "The replacement text.", "required": true },
+        { "name": "start_line", "type": "number", "description": "First line to replace (line-based mode).", "required": false },
+        { "name": "end_line", "type": "number", "description": "Last line to replace (line-based mode).", "required": false },
+        { "name": "find", "type": "string", "description": "Exact text to find (text-based mode).", "required": false }
+      ]
+    },
+    {
+      "name": "search_files",
+      "description": "Search file contents for a regex pattern; returns matching lines with file:line.",
+      "parameters": [
+        { "name": "pattern", "type": "string", "description": "Regular expression to search for.", "required": true },
+        { "name": "path", "type": "string", "description": "Directory to search (default: working dir).", "required": false },
+        { "name": "include", "type": "string", "description": "Optional glob to filter files, e.g. *.py.", "required": false },
+        { "name": "context", "type": "number", "description": "Context lines around each match (0-10).", "required": false },
+        { "name": "max_results", "type": "number", "description": "Maximum matches to return.", "required": false }
+      ]
+    },
+    {
+      "name": "list_files",
+      "description": "List files and directories, optionally filtered by a glob, optionally recursive.",
+      "parameters": [
+        { "name": "path", "type": "string", "description": "Directory to list (default: working dir).", "required": false },
+        { "name": "pattern", "type": "string", "description": "Optional glob to filter entries.", "required": false },
+        { "name": "recursive", "type": "boolean", "description": "Search subdirectories recursively.", "required": false }
+      ]
+    },
+    {
+      "name": "shell",
+      "description": "Run a shell command on the host. Foreground by default; run_in_background returns a handle.",
+      "parameters": [
+        { "name": "command", "type": "string", "description": "The shell command to execute.", "required": true },
+        { "name": "run_in_background", "type": "string", "description": "\"true\" to start in the background and return a handle.", "required": false },
+        { "name": "cwd", "type": "string", "description": "Optional working directory.", "required": false }
+      ]
+    },
+    {
+      "name": "list_processes",
+      "description": "List background processes started this session, with handle and status.",
+      "parameters": []
+    },
+    {
+      "name": "read_process_output",
+      "description": "Read the output a background process has produced.",
+      "parameters": [
+        { "name": "handle", "type": "string", "description": "The process handle (e.g. bg1).", "required": true }
+      ]
+    },
+    {
+      "name": "kill_process",
+      "description": "Stop a background process started this session.",
+      "parameters": [
+        { "name": "handle", "type": "string", "description": "The process handle to stop (e.g. bg1).", "required": true }
+      ]
+    },
+    {
+      "name": "web_search",
+      "description": "Search the web using DuckDuckGo and return the top results.",
+      "parameters": [
+        { "name": "query", "type": "string", "description": "The search query.", "required": true },
+        { "name": "max_results", "type": "number", "description": "Maximum number of results.", "required": false }
+      ]
+    },
+    {
+      "name": "browse",
+      "description": "Browse a web page: navigate, readText, extractText (CSS selector), readHTML. Browser-only actions report a clear notice.",
+      "parameters": [
+        { "name": "action", "type": "string", "description": "navigate | readText | extractText | readHTML | click | executeJS | screenshot.", "required": true },
+        { "name": "url", "type": "string", "description": "URL to load (for navigate, or to read a specific page).", "required": false },
+        { "name": "selector", "type": "string", "description": "CSS selector (for extractText / readHTML / click).", "required": false },
+        { "name": "script", "type": "string", "description": "JavaScript to run (for executeJS; needs a browser backend).", "required": false }
+      ]
+    },
+    {
+      "name": "save_memory",
+      "description": "Save a memory for future sessions (preferences, project context, important facts).",
+      "parameters": [
+        { "name": "memory", "type": "string", "description": "The memory to save.", "required": true }
+      ]
+    },
+    {
+      "name": "recall_memory",
+      "description": "List all saved memories.",
+      "parameters": []
+    },
+    {
+      "name": "clear_memory",
+      "description": "Delete all saved memories.",
+      "parameters": []
+    },
+    {
+      "name": "create_task",
+      "description": "Create a background job that runs a shell command, optionally on a repeating schedule.",
+      "parameters": [
+        { "name": "goal", "type": "string", "description": "The shell command to run in the background.", "required": true },
+        { "name": "schedule", "type": "string", "description": "Optional: omit/\"now\" to run once, or an interval like \"every 5m\" / \"every day at 9am\".", "required": false }
+      ]
+    },
+    {
+      "name": "list_tasks",
+      "description": "List background jobs created this session, with id and status.",
+      "parameters": []
+    },
+    {
+      "name": "cancel_task",
+      "description": "Cancel a background job (stops a schedule / kills a running command).",
+      "parameters": [
+        { "name": "task_id", "type": "string", "description": "The task id (e.g. task1).", "required": true }
+      ]
+    }
+  ],
+  "prompts": [
+    {
+      "name": "portrait",
+      "description": "Create a photorealistic portrait. Uses FLUX.2-klein-4B, the best model for faces."
+    },
+    {
+      "name": "poster",
+      "description": "Create a text-heavy poster. Uses Mage-Flow-Turbo, the most reliable model for in-image text."
+    },
+    {
+      "name": "lofi_track",
+      "description": "Compose a lo-fi hip hop track (instrumental) with generate_music."
+    },
+    {
+      "name": "song",
+      "description": "Write and generate a short song with lyrics via generate_music."
+    },
+    {
+      "name": "short_video",
+      "description": "Generate a short cinematic video clip with generate_video."
+    }
+  ],
+  "resources": [
+    {
+      "name": "status",
+      "description": "Live health of the remote mlx-serve instance (mlx-serve://status)."
+    },
+    {
+      "name": "models",
+      "description": "The model inventory with capability flags (mlx-serve://models)."
+    },
+    {
+      "name": "guidance",
+      "description": "Advice on which model to use for which kind of generation (mlx-serve://guidance)."
+    }
+  ]
+}

@@ -1,166 +1,194 @@
 # [![MCP Badge](https://lobehub.com/badge/mcp/congenital-mlx-serve-mcp?style=for-the-badge)](https://lobehub.com/mcp/congenital-mlx-serve-mcp)
 
-**MCP server that turns a remote [mlx-serve](https://github.com/ddalcu/mlx-serve) instance into callable tools** — so any MCP client (Claude Code, Claude Desktop, Cline, ...) on any device can generate images, speech, music, video and 3D meshes through your Mac's `ip:port`.
+An MCP (Model Context Protocol) server that gives any MCP client two things at once:
 
-mlx-serve runs the models natively on Apple Silicon; this bridge speaks MCP on one side and mlx-serve's OpenAI-style media API (`/v1/images`, `/v1/audio`, `/v1/video`, `/v1/3d`) on the other. Nothing is generated locally — your machine only talks HTTP to the server.
+1. **A bridge to a remote [mlx-serve](https://github.com/ddalcu/mlx-serve) instance** — Apple
+   Silicon's OpenAI-compatible local inference server — exposing its media generation
+   endpoints (image, image-edit, speech, music, video, 3D) and model management as MCP tools.
+2. **The full local agent toolset** — files, shell, background processes, web search, memory,
+   and scheduled tasks — so the same server can also drive the machine it runs on.
 
-```
-┌──────────────┐  stdio/MCP   ┌────────────────┐    HTTP     ┌──────────────────┐
-│ MCP client   │ ◄──────────► │  mlx-serve-mcp │ ──────────► │ mlx-serve server │
-│ (any device) │              │  (this package)│  ip:port    │  (Apple Silicon) │
-└──────────────┘              └────────────────┘             └──────────────────┘
-```
+It speaks MCP using the official Python SDK (`mcp.server.fastmcp.FastMCP`) over **stdio**
+by default, or **SSE** / **streamable-HTTP** if you prefer a network transport.
 
-## Install & run
+> This is a ground-up reimplementation. The previous revision hand-rolled the JSON-RPC
+> protocol, which is fragile and drifts from the spec. This version delegates the protocol
+> to the official SDK and adds the local toolset on top.
 
-Requires Python ≥ 3.10. With [uv](https://docs.astral.sh/uv/) installed:
+## Install
+
+With [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-cd mlx-serve-mcp
-uv sync                 # create venv + install deps
-uv run mlx-serve-mcp --url 192.168.1.10:11234
+uv sync                      # creates .venv and installs deps (add --extra dev for tests)
+uv run mlx-serve-mcp       # launch the server
 ```
 
-The URL accepts bare `ip:port` (http is assumed), `host:port`, or a full `http(s)://...` URL.
+> **Important:** after `uv sync` (or `uv pip install`), the `mlx-serve-mcp` console
+> script exists only inside the project's `.venv` — start it with `uv run
+> mlx-serve-mcp`, **not** a bare `mlx-serve-mcp` (that works only after
+> `uv tool install` / `pipx install`, or a `pip install`).
 
-### Configuration
+Or with plain pip:
 
-CLI flags override environment variables:
+```bash
+pip install -e ".[dev]"
+mlx-serve-mcp              # or: python -m mlx_serve_mcp
+```
 
-| Flag | Env var | Default | Meaning |
-|------|---------|---------|---------|
-| `--url` | `MLX_SERVE_URL` | `http://127.0.0.1:11234` | mlx-serve address |
-| `--api-key` | `MLX_SERVE_API_KEY` | *(none)* | Bearer key when the server runs with API-key auth |
-| `--output-dir` | `MLX_SERVE_OUTPUT_DIR` | `~/Downloads/mlx-serve-mcp` | Where generated media files are written |
-| `--timeout` | `MLX_SERVE_TIMEOUT` | `1800` | HTTP timeout in seconds (video/music can take many minutes) |
+Requires Python ≥ 3.10 (`uv run` picks a suitable interpreter automatically).
+`ffmpeg` comes from the `imageio-ffmpeg` dependency (a system `ffmpeg` on `PATH`
+is used preferentially when present).
 
-### Default models
+## Run
 
-Each media tool accepts an optional `model` argument. When omitted, the tool
-falls back to a configurable default (env var → built-in):
+```bash
+# stdio (default) — for MCP hosts that spawn the server (Claude Desktop, etc.)
+uv run mlx-serve-mcp
 
-| Env var | Tool | Built-in default |
-|---------|------|-----------------|
-| `MLX_SERVE_IMAGE_MODEL` | `generate_image` | `Runpod/FLUX.2-klein-4B-mflux-4bit` |
-| `MLX_SERVE_IMAGE_EDIT_MODEL` | `edit_image` | `Runpod/FLUX.2-klein-4B-mflux-4bit` |
-| `MLX_SERVE_TTS_MODEL` | `text_to_speech` | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16` |
-| `MLX_SERVE_MUSIC_MODEL` | `generate_music` | `ddalcu/MiniMax-Music3-MLX-Serve-8bit` |
-| `MLX_SERVE_VIDEO_MODEL` | `generate_video` | `ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit` |
-| `MLX_SERVE_MESH_MODEL` | `generate_3d` | `ddalcu/Hunyuan3D-2.1-MLX-Serve-8bit` |
+# point it at a specific mlx-serve instance
+uv run mlx-serve-mcp --url http://127.0.0.1:11234 --api-key "$MLX_SERVE_API_KEY"
 
-> **Model recommendation** (based on real-world testing on mlx-serve):
->
-> - `ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit` is fast, but its quality is below
->   `Runpod/FLUX.2-klein-4B-mflux-4bit` — in particular, face generation tends
->   to come out distorted. However, it is far more reliable than
->   `mlx-community/flux2-klein-9b-4bit` at rendering text in images, so for
->   text-centric art (posters, typography, signs) rather than portraits,
->   `ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit` is the recommended choice.
-> - `ddalcu/Mage-Flow-Edit-Turbo-MLX-Serve-8bit` can hit a weight/parameter
->   error on mlx-serve (`Model load failed: MissingMageFlowWeight`), which makes
->   the model unusable.
-> - `mlx-community/flux2-klein-9b-4bit` has a similar load-failure issue.
->
-> **Bottom line: use `Runpod/FLUX.2-klein-4B-mflux-4bit`** for both
-> `generate_image` and `edit_image` — it is the only image model in this group
-> that both loads reliably and produces good results (including faces).
+# network transport (SSE / streamable-HTTP on 127.0.0.1:8765)
+uv run mlx-serve-mcp --transport sse --host 127.0.0.1 --port 8765
+```
 
-Set them in your MCP client config to pin the models you actually have
-installed on the server:
+If you installed with plain `pip`, drop the `uv run` prefix (or use
+`python -m mlx_serve_mcp`).
+
+## Configure an MCP host
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
+(Windows: `%APPDATA%\Claude\claude_desktop_config.json`) and restart Claude:
 
 ```json
 {
   "mcpServers": {
     "mlx-serve": {
       "command": "uv",
-      "args": ["--directory", "/path/to/mlx-serve-mcp", "run", "mlx-serve-mcp", "--url", "192.168.1.10:11234"],
+      "args": ["run", "--directory", "/absolute/path/to/mlx-serve-mcp", "mlx-serve-mcp"],
       "env": {
-        "MLX_SERVE_API_KEY": "private",
-        "MLX_SERVE_IMAGE_MODEL": "ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit",
-        "MLX_SERVE_TTS_MODEL": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16"
+        "MLX_SERVE_URL": "http://127.0.0.1:11234",
+        "MLX_SERVE_API_KEY": "your-key"
       }
     }
   }
 }
 ```
 
-## Wire into your MCP client
+After `uv tool install mlx-serve-mcp` (or `pipx install mlx-serve-mcp`) you can
+instead use `"command": "mlx-serve-mcp"` with no `uv run` wrapper.
 
-Claude Code (`.mcp.json` / `claude mcp add`):
+### LobeHub
 
-```json
-{
-  "mcpServers": {
-    "mlx-serve": {
-      "command": "uv",
-      "args": [
-        "--directory", "/absolute/path/to/mlx-serve-mcp",
-        "run", "mlx-serve-mcp",
-        "--url", "192.168.1.10:11234"
-      ]
-    }
-  }
-}
-```
+The repo ships `lhm.plugin.json` — upload it as a plugin. Its `stdio` deployment
+option spawns `mlx-serve-mcp` and reads `MLX_SERVE_URL` / `MLX_SERVE_API_KEY`
+from the deployment environment.
 
-Claude Desktop (`claude_desktop_config.json`) uses the same `command`/`args` shape. Add `"env": {"MLX_SERVE_API_KEY": "..."}` if the server requires a key.
-
-## Tools
-
-| Tool | Endpoint | Returns |
-|------|----------|---------|
-| `health_check` | `GET /health` | reachability text |
-| `list_models` | `GET /v1/models` | model ids + capability flags (image/speech/music/video/3d/chat) |
-| `load_model(model)` | `POST /v1/load-model` | load into GPU memory (optionally as default) |
-| `unload_model(model)` | `POST /v1/unload-model` | free GPU memory |
-| `generate_image(prompt, size?, seed?, steps?, model?)` | `POST /v1/images/generations` | inline image + saved PNG path |
-| `edit_image(prompt, image_path, mode=edit\|variation, ...)` | same | inline image + saved PNG path |
-| `text_to_speech(text, voice?/ref_audio_path?, speed?, seed?)` | `POST /v1/audio/speech` | saved WAV path |
-| `generate_music(prompt_style, lyrics?, duration_seconds?, bpm?, task?, src_audio_path?)` | `POST /v1/audio/music-generations` | saved WAV path |
-| `generate_video(prompt, num_frames?, width?, height?, turbo?, first_frame_image_path?...)` | `POST /v1/video/generations` | **encoded MP4 path** |
-| `generate_3d(image_path, steps?, octree_resolution?, texture?...)` | `POST /v1/3d/generations` | saved GLB path |
-
-Output files land under `<output-dir>/{images,audio,video,mesh}/` with timestamped names; every tool reports absolute paths in its result text.
-
-## Prompts
-
-One-click prompt templates exposed via `prompts/list` / `prompts/get`:
-
-| Prompt | What it does |
-|--------|-------------|
-| `create_poster` | Text-centric poster/typography (Mage-Flow-Turbo — best at text rendering) |
-| `portrait_photo` | Realistic portrait (FLUX.2-klein-4B — best for faces) |
-| `lofi_track` | Lo-fi hip-hop music track (MiniMax-Music3) |
-| `speak_text` | Natural TTS (Qwen3-TTS) |
-| `image_to_3d` | Cutout photo → textured GLB (Hunyuan3D-2.1) |
-| `short_video` | 9-frame preview video (fastest path) |
-
-## Resources
-
-Live data sources exposed via `resources/list` / `resources/read`:
-
-| Resource | URI | Content |
-|----------|-----|---------|
-| `models` | `mlx-serve://models` | Live model inventory with capability flags |
-| `server_status` | `mlx-serve://status` | Health, version, loaded models |
-| `model_guidance` | `mlx-serve://guidance` | Recommended model per tool (real-world tested) |
-
-## LobeHub Marketplace
-
-This package is published on the [LobeHub MCP Marketplace](https://lobehub.com/mcp/congenital-mlx-serve-mcp) with a full [`lhm.plugin.json`](lhm.plugin.json) manifest and a [`skill.md`](skill.md) for agent discovery.
-
-## Design notes
-
-- **Video**: mlx-serve answers with *raw* RGB8 frame bytes (+ optional PCM s16le track), not an encoded file. This bridge muxes them into H.264/AAC MP4 via ffmpeg — preferring system `ffmpeg`, falling back to the static binary bundled with the [`imageio-ffmpeg`](https://pypi.org/project/imageio-ffmpeg/) dependency, so no separate install is needed.
-- **Images** are returned both inline (MCP image content, instant preview) and as saved PNG files.
-- **Errors**: mlx-serve's named-400 messages (e.g. `'speed' must be in (0, 5]`) are surfaced verbatim so the calling LLM can self-correct.
-- **LoRA fields** are intentionally not exposed: they require `.safetensors` paths on the *server's* disk, which rarely makes sense for remote callers.
-- Long generations are just slow HTTP requests here; raise `--timeout` if your clips are ambitious.
-
-## Development
+## Smoke-test without a host
 
 ```bash
-uv sync
-uv run pytest          # unit tests (mocked HTTP, no server required)
-uv run mlx-serve-mcp --help
+uv sync --extra dev
+uv run python mcp_client.py --list
+uv run python mcp_client.py --call recall_memory
+uv run python mcp_client.py --call generate_image --args '{"prompt": "a red fox in the snow"}'
+```
+
+`mcp_client.py` spawns the server itself (auto-detecting `mlx-serve-mcp` or
+`python -m mlx_serve_mcp`, and adding `src/` to `PYTHONPATH` when running from
+a source checkout) and speaks MCP over stdio.
+
+## Toolset
+
+### Generation (proxied to the remote mlx-serve instance)
+| Tool | What it does |
+| --- | --- |
+| `generate_image` | Text → image (returns the image inline + saves to disk) |
+| `edit_image` | Image + prompt → edited image (image-to-image) |
+| `generate_speech` | Text → spoken audio (TTS) |
+| `generate_music` | Style description (+ optional lyrics) → music |
+| `generate_video` | Prompt → short video clip (muxed to MP4 via ffmpeg) |
+| `generate_3d` | Prompt → 3D mesh (GLB) |
+
+### Local (run on the machine hosting the server)
+| Tool | What it does |
+| --- | --- |
+| `read_file` / `write_file` / `edit_file` | Filesystem read / write / edit |
+| `search_files` / `list_files` | Content search (regex) and directory listing (glob) |
+| `shell` | Run a command (foreground, or background with a handle) |
+| `list_processes` / `read_process_output` / `kill_process` | Manage background processes |
+| `web_search` | DuckDuckGo web search |
+| `browse` | Fetch-based page reading (navigate / readText / extractText / readHTML) |
+| `save_memory` / `recall_memory` / `clear_memory` | A small persistent note store |
+| `create_task` / `list_tasks` / `cancel_task` | Background / scheduled command jobs |
+
+### Resources & prompts
+* **Resources** — `mlx-serve://status` (live health), `mlx-serve://models` (model
+  inventory with capability flags), `mlx-serve://guidance` (model-selection advice).
+* **Prompts** — one-click recipes: `portrait`, `poster`, `lofi_track`, `song`, `short_video`.
+
+## Configuration
+
+CLI flags are layered over `MLX_SERVE_*` environment variables (flag wins):
+
+| Flag | Env var | Default |
+| --- | --- | --- |
+| `--url` / `--base-url` | `MLX_SERVE_URL` | `http://127.0.0.1:11234` |
+| `--api-key` | `MLX_SERVE_API_KEY` | *(none)* |
+| `--output-dir` | `MLX_SERVE_OUTPUT_DIR` | `./output` |
+| `--timeout` | `MLX_SERVE_TIMEOUT` | `1800` (seconds) |
+| `--image-model` | `MLX_SERVE_IMAGE_MODEL` | `ddalcu/Mage-Flow-Turbo-MLX-Serve-8bit` |
+| `--image-edit-model` | `MLX_SERVE_IMAGE_EDIT_MODEL` | `Runpod/FLUX.2-klein-4B-mflux-4bit` |
+| `--tts-model` | `MLX_SERVE_TTS_MODEL` | `mlx-community/Kokoro-82M-v1.0-mlx` |
+| `--music-model` | `MLX_SERVE_MUSIC_MODEL` | `mlx-community/musicgen-small-mlx` |
+| `--video-model` | `MLX_SERVE_VIDEO_MODEL` | `mlx-community/HunyuanVideo-mlx` |
+| `--mesh-model` | `MLX_SERVE_MESH_MODEL` | `mlx-community/trellis-mlx` |
+| `--working-dir` | `MLX_SERVE_WORKING_DIR` | current directory |
+| `--data-dir` | `MLX_SERVE_DATA_DIR` | `~/.mlx-serve-mcp` |
+| `--transport` | `MLX_SERVE_TRANSPORT` | `stdio` |
+| `--host` / `--port` | `MLX_SERVE_HOST` / `MLX_SERVE_PORT` | `127.0.0.1` / `8765` |
+
+Generated artifacts land under `--output-dir` (`images/`, `audio/`, `video/`,
+`mesh/`); the memory store lives under `--data-dir`.
+
+## Layout
+
+```
+src/mlx_serve_mcp/
+  server.py        # composition root: builds the FastMCP app
+  config.py        # CLI flags over MLX_SERVE_* env vars
+  client.py        # async HTTP client for the remote mlx-serve instance
+  video.py         # raw frames + PCM -> H.264/AAC MP4 via ffmpeg
+  state.py         # process-lifetime state (cwd, processes, tasks, memory)
+  prompts.py       # one-click prompt recipes
+  resources.py     # live resources (status / models / guidance)
+  tools/
+    generation.py  # image / edit / speech / music / video / 3d
+    files.py       # read / write / edit / search / list
+    shell.py       # shell (foreground + background)
+    processes.py   # list / read / kill background processes
+    web.py         # web_search + browse
+    memory.py      # save / recall / clear memory
+    tasks.py       # create / list / cancel background jobs
+```
+
+## SDK note (v1 pin)
+
+This package pins `mcp>=1.9,<2.0` and uses `mcp.server.fastmcp.FastMCP`. The MCP
+Python SDK **v2 removed the bundled `FastMCP`** (it is now `MCPServer`, and the
+maintained high-level framework is the standalone
+[`fastmcp`](https://gofastmcp.com) package). Upgrading is a one-line import
+change — `from fastmcp import FastMCP` — plus repointing the content imports;
+the tool / resource / prompt decorators and `run()` are unchanged. The
+construction in `server.py` is deliberately defensive so it keeps working
+across SDK constructor variance.
+
+## Tests
+
+```bash
+uv sync --extra dev
+uv run pytest            # unit tests (no network / mlx-serve required)
+uv run pytest -m live    # live tests (need a running mlx-serve + ffmpeg)
 ```
