@@ -11,6 +11,10 @@ dependencies = [
     # Pin to the v1 line: `mcp.server.fastmcp` (FastMCP) was removed in the
     # v2 SDK. Upgrading to the standalone `fastmcp` package is a one-line import
     # change (see README) when you outgrow this pin.
+    # The `crypto` extra of pyjwt and the `cryptography` dependency of `mcp`
+    # are excluded (see [tool.uv] below): this project never signs or
+    # verifies tokens — the API key is only sent as a plain Bearer header —
+    # so the heavy native `cryptography` wheel is not needed at runtime.
     "mcp>=1.9,<2.0",
     "httpx>=0.27",
     "imageio-ffmpeg>=0.5",
@@ -21,6 +25,20 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+]
+
+[tool.uv]
+# `mcp` (and `pyjwt`, its transitive dependency) would normally pull in
+# `cryptography`, which fails to install on this machine. Nothing in this
+# project needs it: the API key is forwarded as a plain Bearer header and no
+# JWT/encryption feature of the MCP SDK is used, so we exclude it here and
+# hard-pin `pyjwt` without its `crypto` extra.
+# NOTE: uv only excludes *direct* requirements of excluded packages, so every
+# package that transitively depends on `cryptography` must be excluded or
+# pinned without the `crypto` extra here.
+override-dependencies = [
+    "cryptography; python_version < '3'",
+    "pyjwt>=2.10,<2.11",
 ]
 
 [project.scripts]

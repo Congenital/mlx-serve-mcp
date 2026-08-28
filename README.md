@@ -46,6 +46,10 @@ is used preferentially when present).
 # stdio (default) — for MCP hosts that spawn the server (Claude Desktop, etc.)
 uv run mlx-serve-mcp
 
+# Native deps avoided entirely: `cryptography` is excluded via
+# `[tool.uv] override-dependencies` (uv sync will not install it; `pyjwt`
+# stays on the pure-Python `2.10` line, and nothing in the code requires it)
+
 # point it at a specific mlx-serve instance
 uv run mlx-serve-mcp --url http://127.0.0.1:11234 --api-key "$MLX_SERVE_API_KEY"
 
