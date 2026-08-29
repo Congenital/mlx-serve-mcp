@@ -1,6 +1,6 @@
 {
   "identifier": "congenital-mlx-serve-mcp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "name": "mlx-serve MCP",
   "description": "Bring Apple Silicon AI to your MCP clients — a stdio bridge to a remote mlx-serve inference server for images, speech, music, video and 3D, plus a full local toolset (files, shell, web, memory, scheduled tasks) and ready-made one-click prompts.",
   "author": "Congenital",
@@ -9,6 +9,7 @@
   "metadata": {
     "lobeChat": {
       "changelog": {
+		"1.1.1": "Change implemeation",
         "1.1.0": "Reimplemented on the official MCP SDK (FastMCP). Added the full local agent toolset: files, shell, background processes, web search/browse, persistent memory, and scheduled tasks. Generation tools now return media inline.",
         "1.0.0": "Initial release: stdio bridge to a remote mlx-serve instance for images, speech, music, video and 3D, with one-click prompts."
       }
